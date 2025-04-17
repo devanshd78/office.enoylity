@@ -49,7 +49,7 @@ const Sidebar: FC = () => {
   };
 
   const handleLogout = () => {
-    // TODO: insert actual logout logic (clear auth tokens, etc.)
+    localStorage.removeItem('auth');
     setShowLogoutMobile(false);
     void router.push('/login');
   };
