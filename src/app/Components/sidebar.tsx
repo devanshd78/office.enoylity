@@ -11,7 +11,14 @@ import { FiChevronUp, FiChevronDown, FiLogOut, FiMoreHorizontal } from 'react-ic
 const lexend = Lexend({ subsets: ['latin'], weight: ['400', '700'] });
 
 type NavItem = 'dashboard' | 'invoice' | 'payslip' | 'employees';
-type SubMenuItem = 'mhd' | 'enoylity';
+type SubMenuItem = 'mhd' | 'enoylity' | 'enoylityTech';
+
+// Invoice submenu definitions
+const invoiceSubMenus: { key: SubMenuItem; label: string }[] = [
+  { key: 'mhd', label: 'MHD' },
+  { key: 'enoylity', label: 'Enoylity' },
+  { key: 'enoylityTech', label: 'Enoylity Tech' },
+];
 
 const Sidebar: FC = () => {
   const router = useRouter();
@@ -19,7 +26,6 @@ const Sidebar: FC = () => {
 
   // Collapse state for desktop
   const [openInvoice, setOpenInvoice] = useState(false);
-  const [openPayslip, setOpenPayslip] = useState(false);
 
   // Mobile submenu & logout state
   const [mobileSubMenu, setMobileSubMenu] = useState<NavItem | null>(null);
@@ -28,19 +34,18 @@ const Sidebar: FC = () => {
   // Sync collapse based on route
   useEffect(() => {
     setOpenInvoice(pathname.startsWith('/invoice'));
-    setOpenPayslip(pathname.startsWith('/payslip'));
   }, [pathname]);
 
   const selectedNav: NavItem | '' =
     pathname === '/'
       ? 'dashboard'
       : pathname.startsWith('/invoice')
-      ? 'invoice'
-      : pathname.startsWith('/payslip')
-      ? 'payslip'
-      : pathname.startsWith('/employee')
-      ? 'employees'
-      : '';
+        ? 'invoice'
+        : pathname.startsWith('/payslip')
+          ? 'payslip'
+          : pathname.startsWith('/employee')
+            ? 'employees'
+            : '';
 
   const navigateTo = (path: string) => {
     setMobileSubMenu(null);
@@ -55,13 +60,13 @@ const Sidebar: FC = () => {
   };
 
   const toggleInvoice = () => setOpenInvoice(prev => !prev);
-  const togglePayslip = () => setOpenPayslip(prev => !prev);
 
   const handleMobileNav = (item: NavItem) => {
     setShowLogoutMobile(false);
     if (item === 'dashboard') navigateTo('/');
     else if (item === 'employees') navigateTo('/employee');
-    else setMobileSubMenu(prev => (prev === item ? null : item));
+    else if (item === 'payslip') navigateTo('/payslip');
+    else if (item === 'invoice') setMobileSubMenu(prev => (prev === item ? null : item));
   };
 
   const menuItemBase =
@@ -71,7 +76,7 @@ const Sidebar: FC = () => {
   return (
     <>
       {/* Desktop fixed sidebar */}
-      <aside className={`${lexend.className} hidden sm:flex flex-col fixed top-0 left-0 h-screen w-60 border-r bg-white`}>        
+      <aside className={`${lexend.className} hidden sm:flex flex-col fixed top-0 left-0 h-screen w-60 border-r bg-white`}>
         <div className="flex items-center p-4">
           <BsBuilding className="mr-2 text-2xl text-indigo-600" />
           <span className="text-xl font-medium">Office Panel</span>
@@ -99,14 +104,14 @@ const Sidebar: FC = () => {
           </div>
           {openInvoice && (
             <div className="pl-8 space-y-1">
-              {(['mhd','enoylity'] as SubMenuItem[]).map(sub => (
+              {invoiceSubMenus.map(({ key, label }) => (
                 <div
-                  key={sub}
-                  className={`${menuItemBase} !px-0 ${pathname === `/invoice/${sub}` ? activeClass : ''}`}
-                  onClick={() => navigateTo(`/invoice/${sub}`)}
+                  key={key}
+                  className={`${menuItemBase} !px-0 ${pathname === `/invoice/${key}` ? activeClass : ''}`}
+                  onClick={() => navigateTo(`/invoice/${key}`)}
                 >
                   <FaFileInvoiceDollar className="mr-3 text-lg" />
-                  {sub.toUpperCase()}
+                  {label}
                 </div>
               ))}
             </div>
@@ -115,28 +120,12 @@ const Sidebar: FC = () => {
           {/* Payslip */}
           <div
             className={`${menuItemBase} justify-between ${selectedNav === 'payslip' ? activeClass : ''}`}
-            onClick={togglePayslip}
-          >
+            onClick={() => navigateTo('/payslip')}>
             <div className="flex items-center">
               <FaMoneyCheckAlt className="mr-3 text-lg" />
               Payslip
             </div>
-            {openPayslip ? <FiChevronUp /> : <FiChevronDown />}
           </div>
-          {openPayslip && (
-            <div className="pl-8 space-y-1">
-              {(['mhd','enoylity'] as SubMenuItem[]).map(sub => (
-                <div
-                  key={sub}
-                  className={`${menuItemBase} !px-0 ${pathname === `/payslip/${sub}` ? activeClass : ''}`}
-                  onClick={() => navigateTo(`/payslip/${sub}`)}
-                >
-                  <FaMoneyCheckAlt className="mr-3 text-lg" />
-                  {sub.toUpperCase()}
-                </div>
-              ))}
-            </div>
-          )}
 
           {/* Employees */}
           <div
@@ -162,12 +151,9 @@ const Sidebar: FC = () => {
 
       {/* Mobile bottom nav */}
       <nav className="fixed bottom-3 left-1/2 transform -translate-x-1/2 w-11/12 bg-white rounded-2xl shadow-lg p-3 flex justify-evenly sm:hidden">
-        {(['dashboard','invoice','payslip','employees'] as NavItem[]).map(item => {
+        {(['dashboard', 'invoice', 'payslip', 'employees'] as NavItem[]).map(item => {
           const icons: Record<NavItem, JSX.Element> = {
-            dashboard: <BsBuilding className="text-2xl" />, 
-            invoice: <FaFileInvoiceDollar className="text-2xl" />, 
-            payslip: <FaMoneyCheckAlt className="text-2xl" />, 
-            employees: <FaUsers className="text-2xl" />
+            dashboard: <BsBuilding className="text-2xl" />,  invoice: <FaFileInvoiceDollar className="text-2xl" />, payslip: <FaMoneyCheckAlt className="text-2xl" />, employees: <FaUsers className="text-2xl" />
           };
           return (
             <button
@@ -191,18 +177,18 @@ const Sidebar: FC = () => {
         </button>
       </nav>
 
-      {/* Mobile submenu dropdown */}
-      {mobileSubMenu && (
+      {/* Mobile invoice submenu dropdown */}
+      {mobileSubMenu === 'invoice' && (
         <div className="fixed bottom-20 left-1/2 transform -translate-x-1/2 bg-white p-4 rounded-lg shadow-lg max-h-40 overflow-y-auto sm:hidden">
-          {(['mhd','enoylity'] as SubMenuItem[]).map(sub => (
+          {invoiceSubMenus.map(({ key, label }) => (
             <button
-              key={sub}
+              key={key}
               type="button"
-              onClick={() => navigateTo(`/${mobileSubMenu}/${sub}`)}
+              onClick={() => navigateTo(`/invoice/${key}`)}
               className="flex items-center w-full px-3 py-2 rounded-lg transition transform hover:scale-105 hover:bg-indigo-600 hover:text-white"
             >
-              {mobileSubMenu === 'invoice' ? <FaFileInvoiceDollar className="mr-3 text-lg" /> : <FaMoneyCheckAlt className="mr-3 text-lg" />}
-              {sub.toUpperCase()}
+              <FaFileInvoiceDollar className="mr-3 text-lg" />
+              {label}
             </button>
           ))}
           <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-8 border-r-8 border-t-8 border-l-transparent border-r-transparent border-t-white" />

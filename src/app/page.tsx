@@ -1,77 +1,91 @@
 "use client";
 
-import React, { FC, useState, useEffect } from 'react';
+import React, { FC } from 'react';
 import { useRouter } from 'next/navigation';
 
-function useIsMobile(): boolean {
-  const [isMobile, setIsMobile] = useState(false);
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 600);
-    check();
-    window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
-  }, []);
-  return isMobile;
-}
-
-type Option = {
-  title: string;
-  route: string;
-  icon: string;
+// Tailwind class mappings for each group color
+const colorClasses: Record<string, { headerText: string; headerBorder: string; iconBg: string; iconText: string }> = {
+  indigo: {
+    headerText: 'text-indigo-600',
+    headerBorder: 'border-indigo-200',
+    iconBg: 'bg-indigo-50',
+    iconText: 'text-indigo-500',
+  },
+  emerald: {
+    headerText: 'text-emerald-600',
+    headerBorder: 'border-emerald-200',
+    iconBg: 'bg-emerald-50',
+    iconText: 'text-emerald-500',
+  },
+  teal: {
+    headerText: 'text-teal-600',
+    headerBorder: 'border-teal-200',
+    iconBg: 'bg-teal-50',
+    iconText: 'text-teal-500',
+  },
 };
 
-type Group = {
-  groupTitle: string;
-  options: Option[];
-};
-
-const groups: Group[] = [
+// Dashboard groups and options with emoji icons
+const groups = [
   {
-    groupTitle: "Invoice",
+    title: 'Invoice',
     options: [
-      { title: "Generate Invoice for Enoylity", route: "/invoice/enoylity", icon: "🧾" },
-      { title: "Generate Invoice for MHD", route: "/invoice/mhd", icon: "🧾" },
+      { title: 'MHD', route: '/invoice/mhd', icon: '🧾' },
+      { title: 'Enoylity', route: '/invoice/enoylity', icon: '🧾' },
+      { title: 'Enoylity Tech', route: '/invoice/enytech', icon: '🧾' },
     ],
+    color: 'indigo',
   },
   {
-    groupTitle: "Payslip",
+    title: 'Payslip',
     options: [
-      { title: "Payslip for Enoylity", route: "/payslip/enoylity", icon: "📄" },
-      { title: "Payslip for MHD", route: "/payslip/mhd", icon: "📄" },
+      { title: 'Enoylity', route: '/payslip/enoylity', icon: '📄' },
     ],
+    color: 'emerald',
   },
   {
-    groupTitle: "Employee",
+    title: 'Employee',
     options: [
-      { title: "Add Employee", route: "/employee/add", icon: "➕" },
-      { title: "View Employee", route: "/employee", icon: "👥" },
+      { title: 'Add', route: '/employee/add', icon: '➕' },
+      { title: 'View', route: '/employee', icon: '👥' },
     ],
+    color: 'teal',
   },
 ];
 
 const Dashboard: FC = () => {
   const router = useRouter();
-  const isMobile = useIsMobile();
 
   return (
-    <div className={`bg-indigo-100 min-h-screen ${isMobile ? 'p-4' : 'p-8'} pb-20`}>      
-      {groups.map((group, gi) => (
-        <section key={gi} className={`${isMobile ? 'mb-6' : 'mb-10'}`}>
-          <h2 className={`${isMobile ? 'text-2xl' : 'text-3xl'} font-bold mb-4`}>{group.groupTitle}</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {group.options.map((opt, oi) => (
-              <div
-                key={oi}
-                className="bg-white p-4 rounded-lg shadow hover:shadow-md transition cursor-pointer flex flex-col items-center justify-center text-center"
-                onClick={() => router.push(opt.route)}
-              >
-                <span className="text-6xl">{opt.icon}</span>
-                <p className="mt-2 text-xl">{opt.title}</p>
+    <div className="bg-indigo-50 min-h-screen py-10 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto">
+        <h1 className="text-4xl font-bold text-gray-800 mb-8">Dashboard</h1>
+
+        {groups.map((group, gi) => {
+          const classes = colorClasses[group.color] || colorClasses.indigo;
+          return (
+            <section key={gi} className="mb-12">
+              <h2 className={`text-2xl font-semibold ${classes.headerText} border-b-2 ${classes.headerBorder} pb-2 mb-6`}>
+                {group.title}
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                {group.options.map((opt, oi) => (
+                  <div
+                    key={oi}
+                    onClick={() => router.push(opt.route)}
+                    className="bg-white border border-transparent rounded-2xl p-6 flex flex-col items-center justify-center cursor-pointer hover:border-gray-200 hover:shadow-lg transition"
+                  >
+                    <div className={`${classes.iconBg} p-4 rounded-full mb-4`}>
+                      <span className={`${classes.iconText} text-4xl`}>{opt.icon}</span>
+                    </div>
+                    <p className="text-lg font-medium text-gray-700">{opt.title}</p>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </section>
-      ))}
+            </section>
+          );
+        })}
+      </div>
     </div>
   );
 };
