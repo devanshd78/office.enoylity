@@ -121,7 +121,7 @@ const InvoiceHistoryPage: FC = () => {
   return (
     <div className="min-h-screen bg-indigo-100 p-4">
       <div className="max-w-6xl mx-auto bg-white rounded-lg shadow p-6 flex flex-col">
-        <h1 className="text-2xl font-semibold mb-4">Enoylity Invoice History</h1>
+        <h1 className="text-2xl font-semibold mb-4">Enoylity Studio Invoice History</h1>
 
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 space-y-4 sm:space-y-0">
@@ -145,7 +145,7 @@ const InvoiceHistoryPage: FC = () => {
             </select>
           </div>
           <Link
-            href="/invoice/enoylity/generate"
+            href="/invoice/enoylitystudio/generate"
             className="flex items-center px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition w-full sm:w-auto justify-center"
           >
             <FaPlus className="mr-2" /> Generate Invoice

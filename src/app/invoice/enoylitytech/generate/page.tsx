@@ -55,13 +55,13 @@ const GenerateInvoicePage: FC = () => {
     };
     // TODO: send `invoice` to backend API
     console.log('Submitting invoice:', invoice);
-    router.push('/invoice/enoylity');
+    router.push('/invoice/enoylitytech');
   };
 
   return (
     <div className="min-h-screen bg-indigo-100 p-4">
       <div className="max-w-3xl mx-auto bg-white rounded-lg shadow p-6 mb-12">
-        <h1 className="text-2xl font-semibold mb-4">Generate Invoice for Enoylity</h1>
+        <h1 className="text-2xl font-semibold mb-4">Generate Invoice for Enoylity Tech</h1>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <label className="flex flex-col">
@@ -227,7 +227,7 @@ const GenerateInvoicePage: FC = () => {
 
           <div className="flex justify-end space-x-4">
             <Link
-              href="/invoice/enoylity"
+              href="/invoice/enoylitytech"
               className="px-4 py-2 border rounded-lg"
             >Cancel</Link>
             <button

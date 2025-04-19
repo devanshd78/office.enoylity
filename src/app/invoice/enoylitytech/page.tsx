@@ -145,7 +145,7 @@ const InvoiceHistoryPage: FC = () => {
             </select>
           </div>
           <Link
-            href="/invoice/enytech/generate"
+            href="/invoice/enoylitytech/generate"
             className="flex items-center px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition w-full sm:w-auto justify-center"
           >
             <FaPlus className="mr-2" /> Generate Invoice

@@ -1,9 +1,8 @@
 "use client";
 
-import React, { FC } from 'react';
+import React, { FC, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-// Tailwind class mappings for each group color
 const colorClasses: Record<string, { headerText: string; headerBorder: string; iconBg: string; iconText: string }> = {
   indigo: {
     headerText: 'text-indigo-600',
@@ -17,6 +16,12 @@ const colorClasses: Record<string, { headerText: string; headerBorder: string; i
     iconBg: 'bg-emerald-50',
     iconText: 'text-emerald-500',
   },
+  amber: {
+    headerText: 'text-amber-600',
+    headerBorder: 'border-amber-200',
+    iconBg: 'bg-amber-50',
+    iconText: 'text-amber-500',
+  },
   teal: {
     headerText: 'text-teal-600',
     headerBorder: 'border-teal-200',
@@ -25,7 +30,6 @@ const colorClasses: Record<string, { headerText: string; headerBorder: string; i
   },
 };
 
-// Dashboard groups and options with emoji icons
 const groups = [
   {
     title: 'Invoice',
@@ -35,6 +39,7 @@ const groups = [
       { title: 'Enoylity Tech', route: '/invoice/enytech', icon: '🧾' },
     ],
     color: 'indigo',
+    roles: ['admin'],
   },
   {
     title: 'Payslip',
@@ -42,49 +47,92 @@ const groups = [
       { title: 'Enoylity', route: '/payslip/enoylity', icon: '📄' },
     ],
     color: 'emerald',
+    roles: ['admin', 'user'],
   },
   {
-    title: 'Employee',
+    title: 'Employees',
     options: [
       { title: 'Add', route: '/employee/add', icon: '➕' },
       { title: 'View', route: '/employee', icon: '👥' },
     ],
     color: 'teal',
+    roles: ['admin', 'user'],
+  },
+  {
+    title: 'User Access',
+    options: [
+      { title: 'New', route: '/useraccess', icon: '🛡️' },
+    ],
+    color: 'amber',
+    roles: ['admin'],
   },
 ];
 
 const Dashboard: FC = () => {
   const router = useRouter();
 
+  const [userRole, setUserRole] = useState<string>('user');
+  const [visiblePanels, setVisiblePanels] = useState<string[]>([]);
+
+  useEffect(() => {
+    const storedRole = localStorage.getItem('userRole');
+    if (storedRole) {
+      setUserRole(storedRole);
+    }
+  
+    const storedPanels = localStorage.getItem('show');
+    if (storedPanels) {
+      try {
+        const parsed = JSON.parse(storedPanels);
+        if (Array.isArray(parsed)) {
+          // Normalize to lowercase
+          setVisiblePanels(parsed.map(p => p.toLowerCase()));
+        } else {
+          throw new Error("Invalid format");
+        }
+      } catch (e) {
+        console.error('Invalid visiblePanels format in localStorage');
+        setVisiblePanels([]); // fallback
+      }
+    } else {
+      // No panels stored — show all
+      setVisiblePanels(groups.map(group => group.title.toLowerCase()));
+    }
+  }, []);
+  
+
   return (
     <div className="bg-indigo-50 min-h-screen py-10 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
         <h1 className="text-4xl font-bold text-gray-800 mb-8">Dashboard</h1>
 
-        {groups.map((group, gi) => {
-          const classes = colorClasses[group.color] || colorClasses.indigo;
-          return (
-            <section key={gi} className="mb-12">
-              <h2 className={`text-2xl font-semibold ${classes.headerText} border-b-2 ${classes.headerBorder} pb-2 mb-6`}>
-                {group.title}
-              </h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-                {group.options.map((opt, oi) => (
-                  <div
-                    key={oi}
-                    onClick={() => router.push(opt.route)}
-                    className="bg-white border border-transparent rounded-2xl p-6 flex flex-col items-center justify-center cursor-pointer hover:border-gray-200 hover:shadow-lg transition"
-                  >
-                    <div className={`${classes.iconBg} p-4 rounded-full mb-4`}>
-                      <span className={`${classes.iconText} text-4xl`}>{opt.icon}</span>
+        {groups
+          .filter(group => group.roles.includes(userRole) && visiblePanels.includes(group.title))
+          .map((group, gi) => {
+            const classes = colorClasses[group.color] || colorClasses.indigo;
+
+            return (
+              <section key={gi} className="mb-12">
+                <h2 className={`text-2xl font-semibold ${classes.headerText} border-b-2 ${classes.headerBorder} pb-2 mb-6`}>
+                  {group.title}
+                </h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {group.options.map((opt, oi) => (
+                    <div
+                      key={oi}
+                      onClick={() => router.push(opt.route)}
+                      className="bg-white border border-transparent rounded-2xl p-6 flex flex-col items-center justify-center cursor-pointer hover:border-gray-200 hover:shadow-lg transition"
+                    >
+                      <div className={`${classes.iconBg} p-4 rounded-full mb-4`}>
+                        <span className={`${classes.iconText} text-4xl`}>{opt.icon}</span>
+                      </div>
+                      <p className="text-lg font-medium text-gray-700">{opt.title}</p>
                     </div>
-                    <p className="text-lg font-medium text-gray-700">{opt.title}</p>
-                  </div>
-                ))}
-              </div>
-            </section>
-          );
-        })}
+                  ))}
+                </div>
+              </section>
+            );
+          })}
       </div>
     </div>
   );
