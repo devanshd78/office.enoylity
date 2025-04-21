@@ -1,13 +1,7 @@
 "use client";
 
-import React, { FC, useState } from 'react';
-
-const employees = [
-  'John Doe',
-  'Jane Smith',
-  'Alice Johnson',
-  'Bob Brown'
-];
+import React, { FC, useEffect, useState } from 'react';
+import Swal from 'sweetalert2';
 
 const permissions = [
   'View payslip details',
@@ -19,10 +13,43 @@ const permissions = [
 ];
 
 const ManageAccess: FC = () => {
+  const [employees, setEmployees] = useState<{ employeeId: string; name: string }[]>([]);
   const [selectedEmployee, setSelectedEmployee] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch employees from backend
+  useEffect(() => {
+    const fetchEmployees = async () => {
+      try {
+        const response = await fetch('http://127.0.0.1:4000/employee/getlist', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            page: 1,
+            pageSize: 100  // Adjust based on your needs
+          })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+          setEmployees(result.data.employees);
+        } else {
+          console.error(result.message);
+        }
+      } catch (error) {
+        console.error("Failed to fetch employees", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchEmployees();
+  }, []);
 
   const handlePermissionChange = (permission: string) => {
     setSelectedPermissions(prev =>
@@ -32,10 +59,69 @@ const ManageAccess: FC = () => {
     );
   };
 
-  const handleSubmit = () => {
-    alert(`Access granted to ${selectedEmployee} with username '${username}' for: ${selectedPermissions.join(', ')}`);
-    console.log({ selectedEmployee, username, password, selectedPermissions });
+  const handleSubmit = async () => {
+    if (!selectedEmployee || !username || !password || selectedPermissions.length === 0) {
+      Swal.fire({
+        icon: 'warning',
+        title: 'Incomplete Form',
+        text: 'Please fill in all fields and select at least one permission.'
+      });
+      return;
+    }
+
+    const adminId = localStorage.getItem('adminId');
+
+    const payload = {
+      adminid: adminId,
+      employeeid: selectedEmployee,
+      username,
+      password,
+      permissions: selectedPermissions.reduce<Record<string, boolean>>((acc, perm) => {
+        acc[perm] = true;
+        return acc;
+      }, {})
+    };
+
+    try {
+      const response = await fetch('http://127.0.0.1:4000/subadmin/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        Swal.fire({
+          icon: 'success',
+          title: 'Success!',
+          text: 'Subadmin registered successfully!'
+        });
+
+        // Optional: Reset form
+        setSelectedEmployee('');
+        setUsername('');
+        setPassword('');
+        setSelectedPermissions([]);
+      } else {
+        Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: result.error || 'Something went wrong'
+        });
+      }
+    } catch (error) {
+      console.error('Error during registration', error);
+      Swal.fire({
+        icon: 'error',
+        title: 'Oops!',
+        text: 'An error occurred. Please try again later.'
+      });
+    }
   };
+
 
   return (
     <div className="min-h-screen bg-indigo-100 p-6">
@@ -47,10 +133,13 @@ const ManageAccess: FC = () => {
           value={selectedEmployee}
           onChange={e => setSelectedEmployee(e.target.value)}
           className="w-full mb-4 p-2 border border-gray-300 rounded-lg"
+          disabled={loading}
         >
-          <option value="">-- Choose an employee --</option>
+          <option value="">{loading ? 'Loading employees...' : '-- Choose an employee --'}</option>
           {employees.map(emp => (
-            <option key={emp} value={emp}>{emp}</option>
+            <option key={emp.employeeId} value={emp.employeeId}>
+              {emp.name}
+            </option>
           ))}
         </select>
 

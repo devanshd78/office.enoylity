@@ -39,13 +39,13 @@ const groups = [
       { title: 'Enoylity Tech', route: '/invoice/enytech', icon: '🧾' },
     ],
     color: 'indigo',
-    //roles: ['admin'],
+    roles: ['admin'],
   },
   {
     title: 'Payslip',
     options: [{ title: 'Enoylity', route: '/payslip/enoylity', icon: '📄' }],
     color: 'emerald',
-    //roles: ['admin', 'user'],
+    roles: ['admin', 'user'],
   },
   {
     title: 'Employees',
@@ -54,19 +54,21 @@ const groups = [
       { title: 'View', route: '/employee', icon: '👥' },
     ],
     color: 'teal',
-    //: ['admin', 'user'],
+    roles: ['admin', 'user'],
   },
   {
     title: 'User Access',
     options: [{ title: 'New', route: '/useraccess', icon: '🛡️' }],
     color: 'amber',
-    //roles: ['admin'],
+    roles: ['admin'],
   },
 ];
 
 const Dashboard: FC = () => {
   const router = useRouter();
   const pathname = usePathname();
+  const [userRole, setUserRole] = useState<string>('user');
+  const [visiblePanels, setVisiblePanels] = useState<string[]>([]);
 
   useEffect(() => {
     const adminId = localStorage.getItem('adminId');
@@ -75,12 +77,41 @@ const Dashboard: FC = () => {
     }
   }, [router]);
 
+  useEffect(() => {
+    const storedRole = localStorage.getItem('userRole');
+    if (storedRole) {
+      setUserRole(storedRole.toLowerCase());
+    }
+
+    const storedPanels = localStorage.getItem('show');
+    if (storedPanels) {
+      try {
+        const parsed = JSON.parse(storedPanels);
+        if (Array.isArray(parsed)) {
+          setVisiblePanels(parsed.map((p) => p.toLowerCase()));
+        } else {
+          throw new Error('Invalid format');
+        }
+      } catch {
+        console.error('Invalid visiblePanels format in localStorage');
+        setVisiblePanels([]);
+      }
+    } else {
+      setVisiblePanels(groups.map((g) => g.title.toLowerCase()));
+    }
+  }, []);
+
+  const isVisibleGroup = (groupTitle: string) => {
+    return visiblePanels.includes(groupTitle.toLowerCase());
+  };
+
   return (
     <div className="bg-indigo-50 min-h-screen py-10 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
         <h1 className="text-4xl font-bold text-gray-800 mb-8">Dashboard</h1>
 
         {groups
+          .filter((group) => group.roles.includes(userRole) && isVisibleGroup(group.title))
           .map((group, gi) => {
             const classes = colorClasses[group.color] || colorClasses['indigo'];
 

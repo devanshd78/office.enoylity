@@ -1,6 +1,6 @@
 "use client";
 
-import React, { FC, useState } from 'react';
+import React, { FC, useEffect, useState } from 'react';
 import {
   Table,
   TableBody,
@@ -16,46 +16,81 @@ import { Badge } from '@/components/ui/badge';
 import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
 
-const dummyData = [
-  { name: 'John Doe', permissions: ['View payslip details', 'Generate payslip'], username: '1' },
-  { name: 'Jane Smith', permissions: ['View Invoice details', 'Add Employee details'], username: '2' },
-  { name: 'Alice Johnson', permissions: ['View employee details', 'Generate invoice details'], username: '3' },
-];
+interface Subadmin {
+  name: string;
+  permissions: Record<string, number>;
+  username: string;
+  employeeId: string;
+}
 
 const UserAccess: FC = () => {
-  const [data, setData] = useState(dummyData);
+  const [data, setData] = useState<Subadmin[]>([]);
   const [search, setSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(0);
   const rowsPerPage = 5;
   const router = useRouter();
 
+  const fetchSubadmins = async () => {
+    try {
+      const response = await fetch('http://127.0.0.1:5000/subadmin/getlist', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          search,
+          page: currentPage + 1,
+          pageSize: rowsPerPage
+        })
+      });
+      const result = await response.json();
+      if (result.success) {
+        setData(result.data.subadmins || []);
+      } else {
+        console.error('Error fetching subadmins:', result.message);
+      }
+    } catch (error) {
+      console.error('API error:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchSubadmins();
+  }, [currentPage, search]);
+
   const handleNavigate = () => {
     router.push('/useraccess/manage');
   };
 
-  const handleDelete = (index: number) => {
+  const handleDelete = (employeeId: string) => {
     Swal.fire({
       title: 'Are you sure?',
-      text: "You won't be able to revert this!",
+      text: "This will remove the subadmin access.",
       icon: 'warning',
       showCancelButton: true,
       confirmButtonText: 'Yes, delete it!',
-    }).then((result) => {
+    }).then(async (result) => {
       if (result.isConfirmed) {
-        setData((prev) => prev.filter((_, i) => i !== index));
-        Swal.fire('Deleted!', 'The user access has been deleted.', 'success');
+        try {
+          const res = await fetch('http://127.0.0.1:5000/subadmin/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ employeeId })
+          });
+          const resData = await res.json();
+          if (res.ok) {
+            Swal.fire('Deleted!', 'Subadmin removed successfully.', 'success');
+            fetchSubadmins(); // Refresh list
+          } else {
+            Swal.fire('Error', resData.error || 'Failed to delete', 'error');
+          }
+        } catch (error) {
+          console.error(error);
+          Swal.fire('Error', 'API error occurred', 'error');
+        }
       }
     });
   };
 
-  const filteredData = data.filter((entry) =>
-    entry.name.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const paginatedData = filteredData.slice(
-    currentPage * rowsPerPage,
-    (currentPage + 1) * rowsPerPage
-  );
+  const paginatedData = data;
 
   return (
     <div className="min-h-screen bg-indigo-100 p-4 sm:p-6">
@@ -72,14 +107,16 @@ const UserAccess: FC = () => {
               }}
               className="w-full sm:w-64"
             />
-            <Button className="w-full sm:w-auto" onClick={handleNavigate}>Add User Access</Button>
+            <Button className="w-full sm:w-auto" onClick={handleNavigate}>
+              Add User Access
+            </Button>
           </div>
 
           <div className="overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Employee Name</TableHead>
+                  <TableHead>Employee ID</TableHead>
                   <TableHead>Permissions</TableHead>
                   <TableHead className="hidden md:table-cell">Username</TableHead>
                   <TableHead>Actions</TableHead>
@@ -88,24 +125,32 @@ const UserAccess: FC = () => {
               <TableBody>
                 {paginatedData.map((row, index) => (
                   <TableRow key={index} className="align-top">
-                    <TableCell className="font-medium whitespace-nowrap">{row.name}</TableCell>
+                    <TableCell className="font-medium whitespace-nowrap">{row.employeeId}</TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-1">
-                        {row.permissions.map((perm, i) => (
-                          <Badge key={i} variant="secondary">{perm}</Badge>
-                        ))}
+                        {Object.entries(row.permissions)
+                          .filter(([, val]) => val)
+                          .map(([perm], i) => (
+                            <Badge key={i} variant="secondary">{perm}</Badge>
+                          ))}
                       </div>
                       <div className="mt-2 text-sm text-gray-500 md:hidden">
                         Username: {row.username}
                       </div>
                     </TableCell>
-                    <TableCell className="font-medium whitespace-nowrap hidden md:table-cell">{row.username}</TableCell>
+                    <TableCell className="font-medium whitespace-nowrap hidden md:table-cell">
+                      {row.username}
+                    </TableCell>
                     <TableCell>
                       <div className="flex flex-wrap gap-2">
                         <Button variant="outline" size="icon" onClick={() => alert('Edit functionality coming soon')}>
                           <Edit2 className="w-4 h-4" />
                         </Button>
-                        <Button variant="destructive" size="icon" onClick={() => handleDelete(index)}>
+                        <Button
+                          variant="destructive"
+                          size="icon"
+                          onClick={() => handleDelete(row.employeeId)}
+                        >
                           <Trash2 className="w-4 h-4" />
                         </Button>
                       </div>
@@ -126,16 +171,11 @@ const UserAccess: FC = () => {
               Previous
             </Button>
             <span className="text-sm text-gray-600">
-              Page {currentPage + 1} of {Math.ceil(filteredData.length / rowsPerPage)}
+              Page {currentPage + 1}
             </span>
             <Button
               variant="outline"
-              onClick={() =>
-                setCurrentPage((prev) =>
-                  prev + 1 < Math.ceil(filteredData.length / rowsPerPage) ? prev + 1 : prev
-                )
-              }
-              disabled={currentPage + 1 >= Math.ceil(filteredData.length / rowsPerPage)}
+              onClick={() => setCurrentPage((prev) => prev + 1)}
               className="w-full sm:w-auto"
             >
               Next

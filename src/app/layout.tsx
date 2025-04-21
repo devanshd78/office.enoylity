@@ -19,8 +19,9 @@ export default function RootLayout({
   const isLoginPage = pathname === "/login";
 
   useEffect(() => {
-    const auth = localStorage.getItem('auth');
-    if (!auth && pathname !== '/login') {
+    const adminId = localStorage.getItem('adminId');
+    const role = localStorage.getItem('role');
+    if (!adminId && pathname !== '/login') {
       router.replace('/login');
     }
   }, [pathname, router]);

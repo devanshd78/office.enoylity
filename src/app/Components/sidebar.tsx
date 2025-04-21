@@ -10,7 +10,7 @@ import { FiChevronUp, FiChevronDown, FiLogOut, FiMoreHorizontal } from 'react-ic
 // Load Lexend font if needed
 const lexend = Lexend({ subsets: ['latin'], weight: ['400', '700'] });
 
-type NavItem = 'dashboard' | 'invoice' | 'payslip' | 'employees' | 'useraccess';
+type NavItem = 'dashboard' | 'invoice' | 'payslip' | 'employee' | 'useraccess';
 type SubMenuItem = 'mhd' | 'enoylitystudio' | 'enoylitytech';
 
 // Invoice submenu definitions
@@ -60,7 +60,7 @@ const getHiddenPanels = (): NavItem[] => {
     pathname === '/' ? 'dashboard' :
       pathname.startsWith('/invoice') ? 'invoice' :
         pathname.startsWith('/payslip') ? 'payslip' :
-          pathname.startsWith('/employee') ? 'employees' :
+          pathname.startsWith('/employee') ? 'employee' :
             pathname.startsWith('/useraccess') ? 'useraccess' : ''
   );
 
@@ -71,7 +71,9 @@ const getHiddenPanels = (): NavItem[] => {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('auth');
+    localStorage.removeItem('adminId');
+    localStorage.removeItem('role');
+    setHiddenPanels([]);
     void router.push('/login');
   };
 
@@ -102,7 +104,6 @@ const getHiddenPanels = (): NavItem[] => {
         </div>
 
         <nav className="flex-1 overflow-y-auto p-2 space-y-2">
-          {isVisible('dashboard') && (
             <div
               className={`${menuItemBase} ${selectedNav === 'dashboard' ? activeClass : ''}`}
               onClick={() => navigateTo('/')}
@@ -110,9 +111,6 @@ const getHiddenPanels = (): NavItem[] => {
               <BsBuilding className="mr-3 text-lg" />
               Dashboard
             </div>
-          )}
-
-          {isVisible('invoice') && (
             <>
               <div
                 className={`${menuItemBase} justify-between ${selectedNav === 'invoice' ? activeClass : ''}`}
@@ -139,9 +137,7 @@ const getHiddenPanels = (): NavItem[] => {
                 </div>
               )}
             </>
-          )}
 
-          {isVisible('payslip') && (
             <div
               className={`${menuItemBase} ${selectedNav === 'payslip' ? activeClass : ''}`}
               onClick={() => navigateTo('/payslip')}
@@ -149,19 +145,15 @@ const getHiddenPanels = (): NavItem[] => {
               <FaMoneyCheckAlt className="mr-3 text-lg" />
               Payslip
             </div>
-          )}
 
-          {isVisible('employees') && (
             <div
-              className={`${menuItemBase} ${selectedNav === 'employees' ? activeClass : ''}`}
+              className={`${menuItemBase} ${selectedNav === 'employee' ? activeClass : ''}`}
               onClick={() => navigateTo('/employee')}
             >
               <FaUsers className="mr-3 text-lg" />
-              Employees
+              employee
             </div>
-          )}
 
-          {isVisible('useraccess') && (
             <div
               className={`${menuItemBase} ${selectedNav === 'useraccess' ? activeClass : ''}`}
               onClick={() => navigateTo('/useraccess')}
@@ -169,7 +161,6 @@ const getHiddenPanels = (): NavItem[] => {
               <FaUsers className="mr-3 text-lg rotate-180" />
               User Access
             </div>
-          )}
         </nav>
 
         <div className="p-4">
@@ -184,13 +175,12 @@ const getHiddenPanels = (): NavItem[] => {
 
       {/* Mobile bottom nav */}
       <nav className="fixed bottom-3 left-1/2 transform -translate-x-1/2 w-11/12 bg-white rounded-2xl shadow-lg p-3 flex justify-evenly sm:hidden">
-        {(['dashboard', 'invoice', 'payslip', 'employees', 'useraccess'] as NavItem[]).map(item => {
-          if (!isVisible(item)) return null;
+        {(['dashboard', 'invoice', 'payslip', 'employee', 'useraccess'] as NavItem[]).map(item => {
           const icons: Record<NavItem, JSX.Element> = {
             dashboard: <BsBuilding className="text-2xl" />,
             invoice: <FaFileInvoiceDollar className="text-2xl" />,
             payslip: <FaMoneyCheckAlt className="text-2xl" />,
-            employees: <FaUsers className="text-2xl" />,
+            employee: <FaUsers className="text-2xl" />,
             useraccess: <FaUsers className="text-2xl rotate-180" />,
           };
           return (
