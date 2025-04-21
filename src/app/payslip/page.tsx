@@ -1,6 +1,6 @@
 "use client";
 
-import React, { FC, useState } from 'react';
+import React, { FC, useState, useEffect } from 'react';
 import {
   Table,
   TableBody,
@@ -13,35 +13,74 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useRouter } from 'next/navigation';
 
-const payslipData = [
-  { name: 'John Doe', month: 'March', year: 2024, amount: '$3000' },
-  { name: 'Jane Smith', month: 'March', year: 2024, amount: '$3500' },
-  { name: 'Alice Johnson', month: 'February', year: 2024, amount: '$3200' },
-];
+interface PayslipEntry {
+  payslipId: string;
+  employeeId: string;
+  filename: string;
+  month: number;
+  year: number;
+  generated_on: string;
+  lop_days: number;
+  download_link: string;
+}
 
 const PayslipHistory: FC = () => {
-  const [data, setData] = useState(payslipData);
+  const [data, setData] = useState<PayslipEntry[]>([]);
   const [search, setSearch] = useState('');
   const [monthFilter, setMonthFilter] = useState('');
   const [yearFilter, setYearFilter] = useState('');
-  const [currentPage, setCurrentPage] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalRecords, setTotalRecords] = useState(0);
   const rowsPerPage = 5;
   const router = useRouter();
+
+  useEffect(() => {
+    const fetchPayslips = async () => {
+      const response = await fetch('http://127.0.0.1/employee/getpayslips', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          search,
+          month: monthFilter,
+          year: yearFilter,
+          page: currentPage,
+          pageSize: rowsPerPage,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        setData(data.payslips);
+        setTotalRecords(data.pagination.totalRecords);
+      } else {
+        console.error('Failed to fetch payslips');
+      }
+    };
+
+    fetchPayslips();
+  }, [search, monthFilter, yearFilter, currentPage]);
 
   const handleGeneratePayslip = () => {
     router.push('/payslip/enoylity/generate');
   };
 
+  const handleViewPdf = (entry: PayslipEntry) => {
+    window.open(entry.download_link, '_blank');
+  };
+
   const filteredData = data.filter((entry) => {
-    const matchName = entry.name.toLowerCase().includes(search.toLowerCase());
-    const matchMonth = monthFilter ? entry.month === monthFilter : true;
+    const matchName = entry.employeeId.toLowerCase().includes(search.toLowerCase());
+    const matchMonth = monthFilter ? entry.month.toString() === monthFilter : true;
     const matchYear = yearFilter ? entry.year.toString() === yearFilter : true;
     return matchName && matchMonth && matchYear;
   });
 
   const paginatedData = filteredData.slice(
-    currentPage * rowsPerPage,
-    (currentPage + 1) * rowsPerPage
+    (currentPage - 1) * rowsPerPage,
+    currentPage * rowsPerPage
   );
 
   return (
@@ -55,7 +94,7 @@ const PayslipHistory: FC = () => {
 
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
             <Input
-              placeholder="Search by name..."
+              placeholder="Search by employee ID..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="w-full"
@@ -78,19 +117,23 @@ const PayslipHistory: FC = () => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Employee Name</TableHead>
+                  <TableHead>Employee ID</TableHead>
                   <TableHead>Month</TableHead>
                   <TableHead>Year</TableHead>
-                  <TableHead>Amount</TableHead>
+                  <TableHead>Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {paginatedData.map((row, index) => (
                   <TableRow key={index}>
-                    <TableCell className="whitespace-nowrap font-medium">{row.name}</TableCell>
+                    <TableCell className="whitespace-nowrap font-medium">{row.employeeId}</TableCell>
                     <TableCell>{row.month}</TableCell>
                     <TableCell>{row.year}</TableCell>
-                    <TableCell>{row.amount}</TableCell>
+                    <TableCell>
+                      <Button variant="outline" onClick={() => handleViewPdf(row)}>
+                        View PDF
+                      </Button>
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -100,23 +143,23 @@ const PayslipHistory: FC = () => {
           <div className="flex flex-col sm:flex-row items-center justify-between gap-2 mt-4">
             <Button
               variant="outline"
-              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 0))}
-              disabled={currentPage === 0}
+              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+              disabled={currentPage === 1}
               className="w-full sm:w-auto"
             >
               Previous
             </Button>
             <span className="text-sm text-gray-600">
-              Page {currentPage + 1} of {Math.ceil(filteredData.length / rowsPerPage)}
+              Page {currentPage} of {Math.ceil(totalRecords / rowsPerPage)}
             </span>
             <Button
               variant="outline"
               onClick={() =>
                 setCurrentPage((prev) =>
-                  prev + 1 < Math.ceil(filteredData.length / rowsPerPage) ? prev + 1 : prev
+                  prev + 1 <= Math.ceil(totalRecords / rowsPerPage) ? prev + 1 : prev
                 )
               }
-              disabled={currentPage + 1 >= Math.ceil(filteredData.length / rowsPerPage)}
+              disabled={currentPage >= Math.ceil(totalRecords / rowsPerPage)}
               className="w-full sm:w-auto"
             >
               Next

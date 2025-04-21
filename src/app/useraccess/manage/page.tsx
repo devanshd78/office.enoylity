@@ -24,7 +24,7 @@ const ManageAccess: FC = () => {
   useEffect(() => {
     const fetchEmployees = async () => {
       try {
-        const response = await fetch('http://127.0.0.1:4000/employee/getlist', {
+        const response = await fetch('http://127.0.0.1:5000/employee/getlist', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -83,7 +83,7 @@ const ManageAccess: FC = () => {
     };
 
     try {
-      const response = await fetch('http://127.0.0.1:4000/subadmin/register', {
+      const response = await fetch('http://127.0.0.1:5000/subadmin/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

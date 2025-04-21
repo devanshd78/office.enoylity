@@ -21,7 +21,7 @@ export default function RootLayout({
   useEffect(() => {
     const adminId = localStorage.getItem('adminId');
     const role = localStorage.getItem('role');
-    if (!adminId && pathname !== '/login') {
+    if (!role && pathname !== '/login') {
       router.replace('/login');
     }
   }, [pathname, router]);

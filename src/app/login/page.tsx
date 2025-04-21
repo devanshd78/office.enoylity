@@ -19,10 +19,10 @@ const LoginPage: React.FC = () => {
   
   useEffect(() => {
     setIsMounted(true);
-    const adminId = localStorage.getItem('adminId');
+    const role = localStorage.getItem('role');
     
     // Prevent redirect loop by checking if already on "/"
-    if (adminId && pathname !== '/dashboard') {
+    if (role && pathname !== '/') {
       router.replace('/');
     }
   }, [router, pathname]);
@@ -32,12 +32,12 @@ const LoginPage: React.FC = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-
+  
     if (!username || !password) {
       setError('Please fill in all fields.');
       return;
     }
-
+  
     try {
       const response = await fetch('http://localhost:5000/admin/login', {
         method: 'POST',
@@ -46,13 +46,21 @@ const LoginPage: React.FC = () => {
         },
         body: JSON.stringify({ email: username, password }),
       });
-
+  
       const data = await response.json();
-
+  
       if (response.ok && data.success) {
-        localStorage.setItem('adminId', data.data.adminId);
-        localStorage.setItem('role', data.data.role);
-        router.replace('/dashboard');
+        const role = data.data.role;
+        localStorage.setItem('role', role);
+  
+        if (role === 'admin') {
+          localStorage.setItem('adminId', data.data.adminId);
+        } else if (role === 'subadmin') {
+          localStorage.setItem('subadminId', data.data.subadminId);
+          localStorage.setItem('permissions', JSON.stringify(data.data.permissions || {}));
+        }
+  
+        router.replace('/');
       } else {
         setError(data.message || 'Login failed. Please try again.');
       }
@@ -61,6 +69,7 @@ const LoginPage: React.FC = () => {
       setError('Something went wrong. Please try again later.');
     }
   };
+  
 
   return (
     <div className={`${lexend.className} min-h-screen flex flex-col md:flex-row`}>

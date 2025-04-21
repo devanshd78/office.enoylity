@@ -34,19 +34,40 @@ const Sidebar: FC = () => {
   const [mobileSubMenu, setMobileSubMenu] = useState<NavItem | null>(null);
   const [showLogoutMobile, setShowLogoutMobile] = useState(false);
 
-  // Read hidden panels from localStorage
-const getHiddenPanels = (): NavItem[] => {
-  const stored = localStorage.getItem('show')
-  if (!stored) {
-    return []
-  }
-  try {
-    return JSON.parse(stored) as NavItem[]
-  } catch {
-    return []
-  }
-}
-  
+  const getHiddenPanels = (): NavItem[] => {
+    const role = localStorage.getItem('role');
+    if (role === 'admin') {
+      return ['dashboard', 'invoice', 'payslip', 'employee', 'useraccess']; // Show all
+    }
+
+    const permissionsRaw = localStorage.getItem('permissions');
+    if (!permissionsRaw) return [];
+
+    try {
+      const permissions = JSON.parse(permissionsRaw);
+
+      const visible: NavItem[] = [];
+      if (permissions['View Invoice details'] || permissions['Generate invoice details']) {
+        visible.push('invoice');
+      }
+      if (permissions['View payslip details'] || permissions['Generate payslip']) {
+        visible.push('payslip');
+      }
+      if (permissions['View Employee Details'] || permissions['Add Employee Details']) {
+        visible.push('employee');
+      }
+      if (permissions['User Access']) {
+        visible.push('useraccess');
+      }
+      visible.push('dashboard'); // Always show dashboard
+
+      return visible;
+    } catch {
+      return [];
+    }
+  };
+
+
   useEffect(() => {
     setHiddenPanels(getHiddenPanels());
   }, []);
@@ -104,6 +125,7 @@ const getHiddenPanels = (): NavItem[] => {
         </div>
 
         <nav className="flex-1 overflow-y-auto p-2 space-y-2">
+          {isVisible('dashboard') && (
             <div
               className={`${menuItemBase} ${selectedNav === 'dashboard' ? activeClass : ''}`}
               onClick={() => navigateTo('/')}
@@ -111,6 +133,8 @@ const getHiddenPanels = (): NavItem[] => {
               <BsBuilding className="mr-3 text-lg" />
               Dashboard
             </div>
+          )}
+          {isVisible('invoice') && (
             <>
               <div
                 className={`${menuItemBase} justify-between ${selectedNav === 'invoice' ? activeClass : ''}`}
@@ -137,7 +161,10 @@ const getHiddenPanels = (): NavItem[] => {
                 </div>
               )}
             </>
+          )}
 
+
+          {isVisible('payslip') && (
             <div
               className={`${menuItemBase} ${selectedNav === 'payslip' ? activeClass : ''}`}
               onClick={() => navigateTo('/payslip')}
@@ -145,15 +172,19 @@ const getHiddenPanels = (): NavItem[] => {
               <FaMoneyCheckAlt className="mr-3 text-lg" />
               Payslip
             </div>
+          )}
 
+          {isVisible('employee') && (
             <div
               className={`${menuItemBase} ${selectedNav === 'employee' ? activeClass : ''}`}
               onClick={() => navigateTo('/employee')}
             >
               <FaUsers className="mr-3 text-lg" />
-              employee
+              Employee
             </div>
+          )}
 
+          {isVisible('useraccess') && (
             <div
               className={`${menuItemBase} ${selectedNav === 'useraccess' ? activeClass : ''}`}
               onClick={() => navigateTo('/useraccess')}
@@ -161,6 +192,7 @@ const getHiddenPanels = (): NavItem[] => {
               <FaUsers className="mr-3 text-lg rotate-180" />
               User Access
             </div>
+          )}
         </nav>
 
         <div className="p-4">
@@ -175,29 +207,31 @@ const getHiddenPanels = (): NavItem[] => {
 
       {/* Mobile bottom nav */}
       <nav className="fixed bottom-3 left-1/2 transform -translate-x-1/2 w-11/12 bg-white rounded-2xl shadow-lg p-3 flex justify-evenly sm:hidden">
-        {(['dashboard', 'invoice', 'payslip', 'employee', 'useraccess'] as NavItem[]).map(item => {
-          const icons: Record<NavItem, JSX.Element> = {
-            dashboard: <BsBuilding className="text-2xl" />,
-            invoice: <FaFileInvoiceDollar className="text-2xl" />,
-            payslip: <FaMoneyCheckAlt className="text-2xl" />,
-            employee: <FaUsers className="text-2xl" />,
-            useraccess: <FaUsers className="text-2xl rotate-180" />,
-          };
-          return (
-            <button
-              key={item}
-              type="button"
-              onClick={() => handleMobileNav(item)}
-              className={`flex flex-col items-center text-sm ${selectedNav === item
-                  ? 'text-indigo-600 font-semibold border-t-2 border-indigo-600 pt-1'
-                  : 'text-gray-500'
-                }`}
-            >
-              {icons[item]}
-              <span className="mt-1 capitalize">{item}</span>
-            </button>
-          );
-        })}
+        {(['dashboard', 'invoice', 'payslip', 'employee', 'useraccess'] as NavItem[])
+          .filter(isVisible)
+          .map(item => {
+            const icons: Record<NavItem, JSX.Element> = {
+              dashboard: <BsBuilding className="text-2xl" />,
+              invoice: <FaFileInvoiceDollar className="text-2xl" />,
+              payslip: <FaMoneyCheckAlt className="text-2xl" />,
+              employee: <FaUsers className="text-2xl" />,
+              useraccess: <FaUsers className="text-2xl rotate-180" />,
+            };
+            return (
+              <button
+                key={item}
+                type="button"
+                onClick={() => handleMobileNav(item)}
+                className={`flex flex-col items-center text-sm ${selectedNav === item
+                    ? 'text-indigo-600 font-semibold border-t-2 border-indigo-600 pt-1'
+                    : 'text-gray-500'
+                  }`}
+              >
+                {icons[item]}
+                <span className="mt-1 capitalize">{item}</span>
+              </button>
+            );
+          })}
 
         <button
           type="button"
@@ -207,6 +241,7 @@ const getHiddenPanels = (): NavItem[] => {
           <FiMoreHorizontal className="text-2xl" />
         </button>
       </nav>
+
 
       {/* Mobile invoice submenu */}
       {mobileSubMenu === 'invoice' && isVisible('invoice') && (
@@ -224,6 +259,7 @@ const getHiddenPanels = (): NavItem[] => {
           ))}
         </div>
       )}
+
 
       {/* Mobile logout dropdown */}
       {showLogoutMobile && (
