@@ -8,9 +8,10 @@ const permissions = [
   'Generate payslip',
   'View Invoice details',
   'Generate invoice details',
-  'Add Employee details',
-  'View employee details'
+  'Add Employee Details',
+  'View Employee Details',
 ];
+
 
 const ManageAccess: FC = () => {
   const [employees, setEmployees] = useState<{ employeeId: string; name: string }[]>([]);

@@ -35,23 +35,23 @@ const groups = [
     title: 'Invoice',
     permissionKeys: ['Generate invoice details', 'View Invoice details'],
     options: [
-      { title: 'MHD', route: '/invoice/mhd', icon: '🧾' },
-      { title: 'Enoylity', route: '/invoice/enoylity', icon: '🧾' },
-      { title: 'Enoylity Tech', route: '/invoice/enytech', icon: '🧾' },
+      { title: 'MHD Tech', route: '/invoice/mhdtech', icon: '🧾' },
+      { title: 'Enoylity Studio', route: '/invoice/enoylitystudio', icon: '🧾' },
+      { title: 'Enoylity Media Creations LLC', route: '/invoice/enoylitytech', icon: '🧾' },
     ],
     color: 'indigo',
   },
   {
     title: 'Payslip',
     permissionKeys: ['Generate payslip', 'View payslip details'],
-    options: [{ title: 'Enoylity', route: '/payslip/enoylity', icon: '📄' }],
+    options: [{ title: 'Enoylity Studio', route: '/payslip/enoylity', icon: '📄' }],
     color: 'emerald',
   },
   {
     title: 'Employees',
     permissionKeys: ['Add Employee Details', 'View Employee Details'],
     options: [
-      { title: 'Add', route: '/employee/add', icon: '➕', permissionKey: 'Add Employee Details' },
+      { title: 'Add', route: '/employee/addedit', icon: '➕', permissionKey: 'Add Employee Details' },
       { title: 'View', route: '/employee', icon: '👥', permissionKey: 'View Employee Details' },
     ],
     color: 'teal',
@@ -59,7 +59,13 @@ const groups = [
   {
     title: 'User Access',
     permissionKeys: [], // Only for admin
-    options: [{ title: 'New', route: '/useraccess', icon: '🛡️' }],
+    options: [{ title: 'Manage', route: '/useraccess', icon: '🛡️' }],
+    color: 'amber',
+  },
+  {
+    title: 'Settings',
+    permissionKeys: [], // Only for admin
+    options: [{ title: 'Manage Settings', route: '/settings', icon: '⚙️' }],
     color: 'amber',
   },
 ];

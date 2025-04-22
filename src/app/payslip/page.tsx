@@ -34,6 +34,18 @@ const PayslipHistory: FC = () => {
   const rowsPerPage = 5;
   const router = useRouter();
 
+  const role =
+    typeof window !== "undefined" ? localStorage.getItem("role") : null;
+  const permissions =
+    typeof window !== "undefined"
+      ? JSON.parse(localStorage.getItem("permissions") || "{}")
+      : {};
+
+  const canViewPayslips =
+    role === "admin" || permissions["View payslip details"] === 1;
+  const canGeneratePayslips =
+    role === "admin" || permissions["Generate Payslip details"] === 1;
+
   useEffect(() => {
     const fetchPayslips = async () => {
       const response = await fetch('http://127.0.0.1/employee/getpayslips', {
@@ -89,82 +101,97 @@ const PayslipHistory: FC = () => {
         <div className="bg-white p-4 sm:p-6 rounded-xl shadow">
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-4">
             <h1 className="text-xl font-semibold">Payslip History</h1>
-            <Button onClick={handleGeneratePayslip}>Generate Payslip</Button>
+            {
+              canGeneratePayslips && (
+                <Button onClick={handleGeneratePayslip}>Generate New Payslip</Button>
+              )
+            }
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-            <Input
-              placeholder="Search by employee ID..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full"
-            />
-            <Input
-              placeholder="Filter by month..."
-              value={monthFilter}
-              onChange={(e) => setMonthFilter(e.target.value)}
-              className="w-full"
-            />
-            <Input
-              placeholder="Filter by year..."
-              value={yearFilter}
-              onChange={(e) => setYearFilter(e.target.value)}
-              className="w-full"
-            />
-          </div>
+          {
+            canViewPayslips ? (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                  <Input
+                    placeholder="Search by employee ID..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="w-full"
+                  />
+                  <Input
+                    placeholder="Filter by month..."
+                    value={monthFilter}
+                    onChange={(e) => setMonthFilter(e.target.value)}
+                    className="w-full"
+                  />
+                  <Input
+                    placeholder="Filter by year..."
+                    value={yearFilter}
+                    onChange={(e) => setYearFilter(e.target.value)}
+                    className="w-full"
+                  />
+                </div>
 
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Employee ID</TableHead>
-                  <TableHead>Month</TableHead>
-                  <TableHead>Year</TableHead>
-                  <TableHead>Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginatedData.map((row, index) => (
-                  <TableRow key={index}>
-                    <TableCell className="whitespace-nowrap font-medium">{row.employeeId}</TableCell>
-                    <TableCell>{row.month}</TableCell>
-                    <TableCell>{row.year}</TableCell>
-                    <TableCell>
-                      <Button variant="outline" onClick={() => handleViewPdf(row)}>
-                        View PDF
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Employee ID</TableHead>
+                        <TableHead>Month</TableHead>
+                        <TableHead>Year</TableHead>
+                        <TableHead>Action</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {paginatedData.map((row, index) => (
+                        <TableRow key={index}>
+                          <TableCell className="whitespace-nowrap font-medium">{row.employeeId}</TableCell>
+                          <TableCell>{row.month}</TableCell>
+                          <TableCell>{row.year}</TableCell>
+                          <TableCell>
+                            <Button variant="outline" onClick={() => handleViewPdf(row)}>
+                              View PDF
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
 
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-2 mt-4">
-            <Button
-              variant="outline"
-              onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-              disabled={currentPage === 1}
-              className="w-full sm:w-auto"
-            >
-              Previous
-            </Button>
-            <span className="text-sm text-gray-600">
-              Page {currentPage} of {Math.ceil(totalRecords / rowsPerPage)}
-            </span>
-            <Button
-              variant="outline"
-              onClick={() =>
-                setCurrentPage((prev) =>
-                  prev + 1 <= Math.ceil(totalRecords / rowsPerPage) ? prev + 1 : prev
-                )
-              }
-              disabled={currentPage >= Math.ceil(totalRecords / rowsPerPage)}
-              className="w-full sm:w-auto"
-            >
-              Next
-            </Button>
-          </div>
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-2 mt-4">
+                  <Button
+                    variant="outline"
+                    onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="w-full sm:w-auto"
+                  >
+                    Previous
+                  </Button>
+                  <span className="text-sm text-gray-600">
+                    Page {currentPage} of {Math.ceil(totalRecords / rowsPerPage)}
+                  </span>
+                  <Button
+                    variant="outline"
+                    onClick={() =>
+                      setCurrentPage((prev) =>
+                        prev + 1 <= Math.ceil(totalRecords / rowsPerPage) ? prev + 1 : prev
+                      )
+                    }
+                    disabled={currentPage >= Math.ceil(totalRecords / rowsPerPage)}
+                    className="w-full sm:w-auto"
+                  >
+                    Next
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <div className="text-center">
+                <p className="text-lg text-gray-600">
+                  You do not have permission to view payslip details.
+                </p>
+              </div>
+            )}
         </div>
       </div>
     </div>

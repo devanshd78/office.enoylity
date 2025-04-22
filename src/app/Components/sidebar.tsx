@@ -5,19 +5,19 @@ import { useRouter, usePathname } from 'next/navigation';
 import { Lexend } from 'next/font/google';
 import { BsBuilding } from 'react-icons/bs';
 import { FaFileInvoiceDollar, FaMoneyCheckAlt, FaUsers } from 'react-icons/fa';
-import { FiChevronUp, FiChevronDown, FiLogOut, FiMoreHorizontal } from 'react-icons/fi';
+import { FiChevronUp, FiChevronDown, FiLogOut, FiMoreHorizontal, FiSettings } from 'react-icons/fi';
 
 // Load Lexend font if needed
 const lexend = Lexend({ subsets: ['latin'], weight: ['400', '700'] });
 
-type NavItem = 'dashboard' | 'invoice' | 'payslip' | 'employee' | 'useraccess';
-type SubMenuItem = 'mhd' | 'enoylitystudio' | 'enoylitytech';
+type NavItem = 'dashboard' | 'invoice' | 'payslip' | 'employee' | 'useraccess' | 'settings';
+type SubMenuItem = 'mhdtech' | 'enoylitystudio' | 'enoylitytech';
 
 // Invoice submenu definitions
 const invoiceSubMenus: { key: SubMenuItem; label: string }[] = [
-  { key: 'mhd', label: 'MHD Tech' },
+  { key: 'mhdtech', label: 'MHD Tech' },
   { key: 'enoylitystudio', label: 'Enoylity Studio' },
-  { key: 'enoylitytech', label: 'Enoylity Tech' },
+  { key: 'enoylitytech', label: 'Enoylity Media Creations LLC' },
 ];
 
 const Sidebar: FC = () => {
@@ -37,7 +37,7 @@ const Sidebar: FC = () => {
   const getHiddenPanels = (): NavItem[] => {
     const role = localStorage.getItem('role');
     if (role === 'admin') {
-      return ['dashboard', 'invoice', 'payslip', 'employee', 'useraccess']; // Show all
+      return ['dashboard', 'invoice', 'payslip', 'employee', 'useraccess', 'settings']; // Show all
     }
 
     const permissionsRaw = localStorage.getItem('permissions');
@@ -59,6 +59,9 @@ const Sidebar: FC = () => {
       if (permissions['User Access']) {
         visible.push('useraccess');
       }
+      if (permissions['Manage Settings']) {
+        visible.push('settings');
+      }
       visible.push('dashboard'); // Always show dashboard
 
       return visible;
@@ -66,7 +69,6 @@ const Sidebar: FC = () => {
       return [];
     }
   };
-
 
   useEffect(() => {
     setHiddenPanels(getHiddenPanels());
@@ -82,7 +84,8 @@ const Sidebar: FC = () => {
       pathname.startsWith('/invoice') ? 'invoice' :
         pathname.startsWith('/payslip') ? 'payslip' :
           pathname.startsWith('/employee') ? 'employee' :
-            pathname.startsWith('/useraccess') ? 'useraccess' : ''
+            pathname.startsWith('/useraccess') ? 'useraccess' :
+              pathname.startsWith('/settings') ? 'settings' : ''
   );
 
   const navigateTo = (path: string) => {
@@ -92,11 +95,18 @@ const Sidebar: FC = () => {
   };
 
   const handleLogout = () => {
-    localStorage.removeItem('adminId');
-    localStorage.removeItem('role');
+    try {
+      localStorage.removeItem('adminId');
+      localStorage.removeItem('subadminId');
+      localStorage.removeItem('permissions');
+      localStorage.removeItem('role');
+    } catch (err) {
+      console.error('Error clearing localStorage:', err);
+    }
     setHiddenPanels([]);
     void router.push('/login');
   };
+  
 
   const toggleInvoice = () => setOpenInvoice(prev => !prev);
 
@@ -163,7 +173,6 @@ const Sidebar: FC = () => {
             </>
           )}
 
-
           {isVisible('payslip') && (
             <div
               className={`${menuItemBase} ${selectedNav === 'payslip' ? activeClass : ''}`}
@@ -193,6 +202,16 @@ const Sidebar: FC = () => {
               User Access
             </div>
           )}
+
+          {isVisible('settings') && (
+            <div
+              className={`${menuItemBase} ${selectedNav === 'settings' ? activeClass : ''}`}
+              onClick={() => navigateTo('/settings')}
+            >
+              <FiSettings className="mr-3 text-lg" />
+              Settings
+            </div>
+          )}
         </nav>
 
         <div className="p-4">
@@ -206,42 +225,46 @@ const Sidebar: FC = () => {
       </aside>
 
       {/* Mobile bottom nav */}
-      <nav className="fixed bottom-3 left-1/2 transform -translate-x-1/2 w-11/12 bg-white rounded-2xl shadow-lg p-3 flex justify-evenly sm:hidden">
-        {(['dashboard', 'invoice', 'payslip', 'employee', 'useraccess'] as NavItem[])
-          .filter(isVisible)
-          .map(item => {
-            const icons: Record<NavItem, JSX.Element> = {
-              dashboard: <BsBuilding className="text-2xl" />,
-              invoice: <FaFileInvoiceDollar className="text-2xl" />,
-              payslip: <FaMoneyCheckAlt className="text-2xl" />,
-              employee: <FaUsers className="text-2xl" />,
-              useraccess: <FaUsers className="text-2xl rotate-180" />,
-            };
-            return (
-              <button
-                key={item}
-                type="button"
-                onClick={() => handleMobileNav(item)}
-                className={`flex flex-col items-center text-sm ${selectedNav === item
+      <nav className="fixed bottom-3 left-1/2 transform -translate-x-1/2 w-11/12 bg-white rounded-2xl shadow-lg p-3 flex justify-evenly sm:hidden overflow-x-auto">
+        {/* Add a wrapper to allow scrolling if too many options */}
+        <div className="flex space-x-3">
+          {(['dashboard', 'invoice', 'payslip', 'employee', 'useraccess', 'settings'] as NavItem[])
+            .filter(isVisible)
+            .map(item => {
+              const icons: Record<NavItem, JSX.Element> = {
+                dashboard: <BsBuilding className="text-2xl" />,
+                invoice: <FaFileInvoiceDollar className="text-2xl" />,
+                payslip: <FaMoneyCheckAlt className="text-2xl" />,
+                employee: <FaUsers className="text-2xl" />,
+                useraccess: <FaUsers className="text-2xl rotate-180" />,
+                settings: <FiSettings className="text-2xl" />,
+              };
+              return (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => handleMobileNav(item)}
+                  className={`flex flex-col items-center text-sm ${selectedNav === item
                     ? 'text-indigo-600 font-semibold border-t-2 border-indigo-600 pt-1'
                     : 'text-gray-500'
-                  }`}
-              >
-                {icons[item]}
-                <span className="mt-1 capitalize">{item}</span>
-              </button>
-            );
-          })}
+                    }`}
+                >
+                  {icons[item]}
+                  <span className="mt-1 capitalize">{item}</span>
+                </button>
+              );
+            })}
 
-        <button
-          type="button"
-          onClick={() => setShowLogoutMobile(prev => !prev)}
-          className="flex flex-col items-center text-sm text-gray-500"
-        >
-          <FiMoreHorizontal className="text-2xl" />
-        </button>
+          {/* More button if needed */}
+          <button
+            type="button"
+            onClick={() => setShowLogoutMobile(prev => !prev)}
+            className="flex flex-col items-center text-sm text-gray-500"
+          >
+            <FiMoreHorizontal className="text-2xl" />
+          </button>
+        </div>
       </nav>
-
 
       {/* Mobile invoice submenu */}
       {mobileSubMenu === 'invoice' && isVisible('invoice') && (
@@ -259,7 +282,6 @@ const Sidebar: FC = () => {
           ))}
         </div>
       )}
-
 
       {/* Mobile logout dropdown */}
       {showLogoutMobile && (

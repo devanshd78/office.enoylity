@@ -34,7 +34,7 @@ type EmployeeInput = {
 export default function AddEditEmployeePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const employeeId = searchParams.get("employeeid");
+  const employeeId = searchParams.get("employeeId");
   const isEdit = Boolean(employeeId);
 
   const [emp, setEmp] = useState<EmployeeInput>({
@@ -65,6 +65,8 @@ export default function AddEditEmployeePage() {
 
   // Fetch existing employee if editing
   useEffect(() => {
+    console.log("Fetching employee data for ID:", employeeId);
+    
     if (!isEdit) return;
     (async () => {
       try {
