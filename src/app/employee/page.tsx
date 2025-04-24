@@ -52,15 +52,25 @@ export default function EmployeesPage() {
   const perPage = 10;
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [role, setRole] = useState<string | null>(null);
+  const [permissions, setPermissions] = useState<Record<string, number>>({});
 
   // Permissions
-  const role = typeof window !== 'undefined' && localStorage.getItem('role');
-  const permissions =
-    typeof window !== 'undefined'
-      ? JSON.parse(localStorage.getItem('permissions') || '{}')
-      : {};
-  const canView = role === 'admin' || permissions['View Employee Details'] === 1;
-  const canAdd = role === 'admin' || permissions['Add Employee Details'] === 1;
+useEffect(() => {
+  const storedRole = localStorage.getItem('role');
+  const storedPermissions = JSON.parse(localStorage.getItem('permissions') || '{}');
+  setRole(storedRole);
+  setPermissions(storedPermissions);
+}, []);
+
+const canView = useMemo(
+  () => role === 'admin' || permissions['View Employee Details'] === 1,
+  [role, permissions]
+);
+const canAdd = useMemo(
+  () => role === 'admin' || permissions['Add Employee Details'] === 1,
+  [role, permissions]
+);
 
   // Fetch employees
   const [data, setData] = useState<Employee[]>([]);
@@ -179,7 +189,7 @@ export default function EmployeesPage() {
           />
           {canAdd && (
             <button
-              onClick={() => router.push('/admin/employees/addedit')}
+              onClick={() => router.push('/employee/addedit')}
               className="flex items-center px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700"
             >
               <FaPlus className="mr-2" /> Add Employee

@@ -12,12 +12,18 @@ const lexend = Lexend({ subsets: ['latin'], weight: ['400', '700'] });
 
 type NavItem = 'dashboard' | 'invoice' | 'payslip' | 'employee' | 'useraccess' | 'settings';
 type SubMenuItem = 'mhdtech' | 'enoylitystudio' | 'enoylitytech';
+type SubSettingItem = 'invoice' | 'payslip';
 
 // Invoice submenu definitions
 const invoiceSubMenus: { key: SubMenuItem; label: string }[] = [
   { key: 'mhdtech', label: 'MHD Tech' },
   { key: 'enoylitystudio', label: 'Enoylity Studio' },
   { key: 'enoylitytech', label: 'Enoylity Media Creations LLC' },
+];
+
+const setingsSubMenus: { key: SubSettingItem; label: string }[] = [
+  { key: 'invoice', label: 'Invoice' },
+  { key: 'payslip', label: 'Payslip' }
 ];
 
 const Sidebar: FC = () => {
@@ -29,6 +35,7 @@ const Sidebar: FC = () => {
 
   // Desktop invoice collapse
   const [openInvoice, setOpenInvoice] = useState(false);
+  const [openSettings, setOpenSettings] = useState(false);
 
   // Mobile submenu & logout
   const [mobileSubMenu, setMobileSubMenu] = useState<NavItem | null>(null);
@@ -106,13 +113,14 @@ const Sidebar: FC = () => {
     setHiddenPanels([]);
     void router.push('/login');
   };
-  
+
 
   const toggleInvoice = () => setOpenInvoice(prev => !prev);
+  const toggleSettings = () => setOpenSettings(prev => !prev);
 
   const handleMobileNav = (item: NavItem) => {
     setShowLogoutMobile(false);
-    if (item === 'invoice') {
+    if (item === 'invoice' || item === 'settings') {
       setMobileSubMenu(prev => (prev === item ? null : item));
     } else {
       navigateTo(item === 'dashboard' ? '/' : `/${item}`);
@@ -204,13 +212,32 @@ const Sidebar: FC = () => {
           )}
 
           {isVisible('settings') && (
-            <div
-              className={`${menuItemBase} ${selectedNav === 'settings' ? activeClass : ''}`}
-              onClick={() => navigateTo('/settings')}
-            >
-              <FiSettings className="mr-3 text-lg" />
-              Settings
-            </div>
+            <>
+              <div
+                className={`${menuItemBase} justify-between ${selectedNav === 'settings' ? activeClass : ''}`}
+                onClick={toggleSettings}
+              >
+                <div className="flex items-center">
+                  <FiSettings className="mr-3 text-lg" />
+                  Settings
+                </div>
+                {openSettings ? <FiChevronUp /> : <FiChevronDown />}
+              </div>
+              {openSettings && (
+                <div className="pl-8 space-y-1">
+                  {setingsSubMenus.map(({ key, label }) => (
+                    <div
+                      key={key}
+                      className={`${menuItemBase} !px-0 ${pathname === `/settings/${key}` ? activeClass : ''}`}
+                      onClick={() => navigateTo(`/settings/${key}`)}
+                    >
+                      <FaFileInvoiceDollar className="mr-3 text-lg" />
+                      {label}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </nav>
 
@@ -282,6 +309,23 @@ const Sidebar: FC = () => {
           ))}
         </div>
       )}
+
+      {mobileSubMenu === 'settings' && isVisible('settings') && (
+        <div className="fixed bottom-20 left-1/2 transform -translate-x-1/2 bg-white p-4 rounded-lg shadow-lg max-h-40 overflow-y-auto sm:hidden">
+          {setingsSubMenus.map(({ key, label }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => navigateTo(`/settings/${key}`)}
+              className="flex items-center w-full px-3 py-2 rounded-lg hover:bg-indigo-600 hover:text-white transition"
+            >
+              <FiSettings className="mr-3 text-lg" />
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
 
       {/* Mobile logout dropdown */}
       {showLogoutMobile && (

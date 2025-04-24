@@ -27,6 +27,7 @@ interface Employee {
   designation: string;
   department: string;
   bank_details?: BankDetails;
+  monthly_salary: number;
 }
 
 interface SalaryComponent {
@@ -43,11 +44,9 @@ const GeneratePayslip: FC = () => {
   const [form, setForm] = useState<Record<string, string>>({
     basic: "",
     hra: "",
-    transport: "",
-    medical: "",
     overtime: "",
     bonus: "",
-    others: "",
+    special: "",
     lop: "",
     paidDays: "",
   });
@@ -85,11 +84,8 @@ const GeneratePayslip: FC = () => {
 
     const salary_structure: SalaryComponent[] = [
       { name: "House Rent Allowance", amount: parseFloat(form.hra || "0") },
-      { name: "Conveyance Allowance", amount: parseFloat(form.transport || "0") },
-      { name: "MED ALL", amount: parseFloat(form.medical || "0") },
       { name: "Overtime Bonas", amount: parseFloat(form.overtime || "0") },
       { name: "Performance Bonas", amount: parseFloat(form.bonus || "0") },
-      { name: "OTH ALL", amount: parseFloat(form.others || "0") },
     ];
 
     const payload = {
@@ -116,6 +112,9 @@ const GeneratePayslip: FC = () => {
       console.error("Error generating payslip:", error);
     }
   };
+
+  const currentYear = new Date().getFullYear();
+  const yearRange = Array.from({ length: 1 }, (_, i) => currentYear + i);
 
   return (
     <div className="min-h-screen bg-indigo-100 p-4 sm:p-6">
@@ -159,7 +158,7 @@ const GeneratePayslip: FC = () => {
               <SelectValue placeholder="Select Year" />
             </SelectTrigger>
             <SelectContent>
-              {[2023, 2024, 2025, 2026].map((year) => (
+              {yearRange.map((year) => (
                 <SelectItem key={year} value={String(year)}>
                   {year}
                 </SelectItem>
@@ -182,6 +181,18 @@ const GeneratePayslip: FC = () => {
                 label: "Bank Account Number",
                 value: selectedEmployee.bank_details?.account_number || "",
               },
+              {
+                label: "Bank Account Name",
+                value: selectedEmployee.bank_details?.bank_name || "",
+              },
+              {
+                label: "Basic Salary (Monthly)",
+                value: selectedEmployee.monthly_salary || 0,
+              },
+              {
+                label: "Housing Rent Allowance",
+                value: selectedEmployee.monthly_salary * 0.6 || 0,
+              },
             ].map(({ label, value }) => (
               <div key={label}>
                 <label className="block text-sm font-medium mb-1">{label}</label>
@@ -194,13 +205,10 @@ const GeneratePayslip: FC = () => {
         {/* Salary Inputs */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
           {[
-            { name: "basic", label: "Basic Salary (Monthly)" },
-            { name: "hra", label: "HRA" },
-            { name: "transport", label: "Transport Allowance" },
-            { name: "medical", label: "Medical Allowance" },
-            { name: "overtime", label: "Overtime" },
-            { name: "bonus", label: "Bonus" },
-            { name: "others", label: "Other Allowances" },
+            
+            { name: "overtime", label: "Overtime Bonus" },
+            { name: "bonus", label: "Performance Bonus" },
+            { name: "others", label: "Special Allowance" },
             { name: "lop", label: "Loss of Pay (LOP)" },
             { name: "paidDays", label: "Paid Days" },
           ].map(({ name, label }) => (
@@ -217,7 +225,7 @@ const GeneratePayslip: FC = () => {
         </div>
 
         <Button onClick={handleSubmit} className="mt-6 w-full">
-          Generate Payslip
+          Generate
         </Button>
       </div>
     </div>

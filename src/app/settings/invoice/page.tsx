@@ -40,20 +40,78 @@ const defaultSettings: Settings = {
   logo_path: '',
 };
 
+const companyOptions = [
+  { label: 'MHD Tech', value: 'mhd-tech' },
+  { label: 'Enoylity Studio', value: 'enoylity-studio' },
+  { label: 'Enoylity Media Creations LLC', value: 'enoylity-media' },
+];
+
 export default function InvoiceSettingsPage() {
+  const [selectedCompany, setSelectedCompany] = useState<string>('mhd-tech');
   const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [loading, setLoading] = useState(false);
   const [logoPreview, setLogoPreview] = useState<string>('');
 
+  const getSettingsUrl = () => {
+    if (selectedCompany === 'mhd-tech') return 'http://127.0.0.1:5000/invoice/settings';
+    if (selectedCompany === 'enoylity-studio') return 'http://127.0.0.1:5000/invoiceEnoylity/settings';
+    if (selectedCompany === 'enoylity-media') return 'http://127.0.0.1:5000/enoylity/settings';
+    return '';
+  };
+
   useEffect(() => {
-    axios
-      .get(`http://127.0.0.1:5000/invoice/settings`)
-      .then((res) => {
-        setSettings(res.data.data);
-        setLogoPreview(`/static/${res.data.data.logo_path}`);
-      })
-      .catch(() => Swal.fire('Error', 'Failed to load settings', 'error'));
-  }, []);
+    const fetchSettings = async () => {
+      try {
+        const res = await axios.get(getSettingsUrl());
+
+        let data = res.data.data;
+        let normalized: Settings;
+
+        if (selectedCompany === 'mhd-tech') {
+          normalized = data; // already matches our format
+          setLogoPreview(`/static/${data.logo_path}`);
+        } else if (selectedCompany === 'enoylity-studio') {
+          normalized = {
+            company_info: {
+              name: data.company_details.company_name,
+              address: data.company_details.company_address,
+              city_state: '',
+              email: data.company_details.company_email,
+              phone: data.company_details.company_phone,
+              youtube: data.company_details.website,
+            },
+            colors: {
+              light_pink: [255, 200, 200], // placeholder
+            },
+            logo_path: data.assets.logo_url,
+          };
+          setLogoPreview(data.assets.logo_url);
+        } else if (selectedCompany === 'enoylity-media') {
+          normalized = {
+            company_info: {
+              name: data.company_details.company_name,
+              address: data.company_details.company_address,
+              city_state: '',
+              email: data.company_details.company_email,
+              phone: data.company_details.company_phone,
+              youtube: data.company_details.website,
+            },
+            colors: {
+              light_pink: [255, 200, 200], // placeholder
+            },
+            logo_path: data.assets.logo_url,
+          };
+          setLogoPreview(data.assets.logo_url);
+        }
+
+        setSettings(normalized);
+      } catch (err) {
+        Swal.fire('Error', 'Failed to load settings', 'error');
+      }
+    };
+
+    fetchSettings();
+  }, [selectedCompany]);
 
   const handleCompanyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -74,7 +132,7 @@ export default function InvoiceSettingsPage() {
     formData.append('file', file);
 
     try {
-      const res = await axios.post(`http://127.0.0.1:5000/invoiceEnoylity/upload-logo/mhd-tech`, formData, {
+      const res = await axios.post(`http://127.0.0.1:5000/invoiceEnoylity/upload-logo/${selectedCompany}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
       setSettings((prev) => ({ ...prev, logo_path: res.data.logo_url }));
@@ -88,9 +146,9 @@ export default function InvoiceSettingsPage() {
   const handleSubmit = async () => {
     setLoading(true);
     try {
-      await axios.post(`http://127.0.0.1:5000/invoice/settings`, settings);
+      await axios.post(getSettingsUrl(), settings);
       Swal.fire('Success', 'Settings updated successfully', 'success');
-    } catch (err) {
+    } catch {
       Swal.fire('Error', 'Update failed', 'error');
     } finally {
       setLoading(false);
@@ -101,9 +159,24 @@ export default function InvoiceSettingsPage() {
     <div className="max-w-2xl mx-auto mt-10">
       <Card>
         <CardContent className="space-y-4 p-6">
-          <h2 className="text-xl font-semibold mb-2">MHD Invoice Settings</h2>
+          <h2 className="text-xl font-semibold mb-2">{companyOptions.find(opt => opt.value === selectedCompany)?.label} Invoice Settings</h2>
 
-          {/* Company Info */}
+          <div>
+            <Label htmlFor="company">Select Company</Label>
+            <select
+              id="company"
+              value={selectedCompany}
+              onChange={(e) => setSelectedCompany(e.target.value)}
+              className="mt-1 w-full border rounded px-3 py-2"
+            >
+              {companyOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {[
             { label: 'Company Name', name: 'name' },
             { label: 'Address', name: 'address' },
@@ -124,14 +197,14 @@ export default function InvoiceSettingsPage() {
             </div>
           ))}
 
-          {/* Logo Upload */}
-          <div>
+          {/* Uncomment to enable logo upload */}
+          {/* <div>
             <Label htmlFor="logo">Company Logo</Label>
             <Input type="file" accept="image/*" onChange={handleLogoUpload} className="mt-2" />
             {logoPreview && (
               <img src={logoPreview} alt="Logo preview" className="mt-4 max-h-24 object-contain" />
             )}
-          </div>
+          </div> */}
 
           <Button onClick={handleSubmit} disabled={loading}>
             {loading ? 'Saving...' : 'Save Settings'}

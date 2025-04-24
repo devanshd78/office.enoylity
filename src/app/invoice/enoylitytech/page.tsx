@@ -65,7 +65,7 @@ const InvoiceHistoryPage: FC = () => {
     setLoading(true);
     try {
       const response = await axios.post(
-        "http://127.0.0.1:5000/invoiceEnoylity/getlist",
+        "http://127.0.0.1:5000/invoiceEnoylityTech/getlist",
         {
           search,
           sortField,
@@ -74,9 +74,10 @@ const InvoiceHistoryPage: FC = () => {
           per_page: perPage,
         }
       );
-
-      const { invoices: raw, total } = response.data;
-
+      
+      const raw = response.data.data.setlist;
+      const total = response.data.data.total_items;
+      
       const parsed = raw.map((invoice: any): Invoice => ({
         id: invoice._id,
         invoice_number: invoice.invoice_number,
@@ -92,7 +93,7 @@ const InvoiceHistoryPage: FC = () => {
         payment_method: invoice.payment_method,
         total_amount: invoice.total,
       }));
-
+      
       setInvoices(parsed);
       setTotalPages(Math.ceil(total / perPage));
       setError("");

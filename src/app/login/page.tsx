@@ -4,24 +4,23 @@ import React, { useState, useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { Lexend } from 'next/font/google';
 import { FiEye, FiEyeOff } from 'react-icons/fi';
+import Swal from 'sweetalert2';
 
 const lexend = Lexend({ subsets: ['latin'], weight: ['400', '700'] });
 
 const LoginPage: React.FC = () => {
-  const [username, setUsername] = useState('');
+  const [emailOrUsername, setEmailOrUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState('');
   const [isMounted, setIsMounted] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
   const router = useRouter();
   const pathname = usePathname();
-  
+
   useEffect(() => {
     setIsMounted(true);
     const role = localStorage.getItem('role');
-    
-    // Prevent redirect loop by checking if already on "/"
     if (role && pathname !== '/') {
       router.replace('/');
     }
@@ -29,57 +28,74 @@ const LoginPage: React.FC = () => {
 
   if (!isMounted) return null;
 
+  const showError = (message: string) => {
+    Swal.fire({
+      icon: 'error',
+      title: 'Login Failed',
+      text: message,
+    });
+  };
+
+  const showSuccess = (message: string) => {
+    Swal.fire({
+      icon: 'success',
+      title: 'Login Successful',
+      text: message,
+      timer: 1500,
+      showConfirmButton: false,
+    });
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-  
-    if (!username || !password) {
-      setError('Please fill in all fields.');
+    setIsLoading(true);
+
+    if (!emailOrUsername || !password) {
+      showError('Please fill in all fields.');
+      setIsLoading(false);
       return;
     }
-  
+
     try {
       const response = await fetch('http://localhost:5000/admin/login', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email: username, password }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: emailOrUsername.trim(),
+          password: password,
+        }),
       });
-  
+
       const data = await response.json();
-  
+
       if (response.ok && data.success) {
         const role = data.data.role;
         localStorage.setItem('role', role);
-  
         if (role === 'admin') {
           localStorage.setItem('adminId', data.data.adminId);
         } else if (role === 'subadmin') {
           localStorage.setItem('subadminId', data.data.subadminId);
           localStorage.setItem('permissions', JSON.stringify(data.data.permissions || {}));
         }
-  
-        router.replace('/');
+
+        setTimeout(() => router.replace('/'), 1500);
       } else {
-        setError(data.message || 'Login failed. Please try again.');
+        showError(data.message || 'Invalid credentials.');
       }
     } catch (err) {
       console.error('Login error:', err);
-      setError('Something went wrong. Please try again later.');
+      showError('Something went wrong. Please try again later.');
+    } finally {
+      setIsLoading(false);
     }
   };
-  
 
   return (
     <div className={`${lexend.className} min-h-screen flex flex-col md:flex-row`}>
-
       {/* Left side welcome panel */}
       <div className="w-full md:w-1/2 flex items-center justify-center bg-gradient-to-br from-indigo-600 to-purple-600 p-6">
         <div className="text-white text-center md:text-left max-w-sm space-y-4">
-          <h2 className="text-3xl md:text-5xl font-extrabold leading-tight">
-            Welcome Back!
-          </h2>
+          <h2 className="text-3xl md:text-5xl font-extrabold leading-tight">Welcome Back!</h2>
           <p className="text-base md:text-lg opacity-90">
             Enter your credentials to access your dashboard and manage your office seamlessly.
           </p>
@@ -91,18 +107,15 @@ const LoginPage: React.FC = () => {
         <div className="w-full max-w-sm bg-white shadow-md rounded-lg p-8 space-y-5">
           <h1 className="text-2xl font-bold text-center">Office Panel Login</h1>
 
-          {error && <p className="text-red-500 text-sm text-center">{error}</p>}
-
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Email / Username</label>
               <input
                 type="text"
-                value={username}
-                onChange={e => setUsername(e.target.value)}
-                placeholder="Your username"
-                autoComplete='username'
-                required
+                value={emailOrUsername}
+                onChange={e => setEmailOrUsername(e.target.value)}
+                placeholder="Enter email or username"
+                autoComplete="username"
                 className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </div>
@@ -114,9 +127,8 @@ const LoginPage: React.FC = () => {
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={e => setPassword(e.target.value)}
-                  placeholder="password"
-                  autoComplete='current-password'
-                  required
+                  placeholder="Enter password"
+                  autoComplete="current-password"
                   className="w-full px-4 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500 pr-10"
                 />
                 <button
@@ -132,9 +144,14 @@ const LoginPage: React.FC = () => {
 
             <button
               type="submit"
-              className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-md transition duration-200"
+              disabled={isLoading}
+              className={`w-full py-2 font-semibold rounded-md transition duration-200 ${
+                isLoading
+                  ? 'bg-indigo-400 cursor-not-allowed'
+                  : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+              }`}
             >
-              Login
+              {isLoading ? 'Logging in...' : 'Login'}
             </button>
           </form>
         </div>

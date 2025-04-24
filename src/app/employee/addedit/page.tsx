@@ -160,7 +160,8 @@ export default function AddEditEmployeePage() {
           text: isEdit
             ? 'Employee record updated successfully!'
             : 'Employee record added successfully!',
-          confirmButtonColor: '#6366f1',
+            timer: 1500,
+            showConfirmButton: false,
         });
         router.push('/employee');
       } else {
@@ -182,11 +183,17 @@ export default function AddEditEmployeePage() {
     }
   };  
 
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLFormElement>) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+      }
+    };
+
   return (
     <div className="min-h-screen bg-indigo-100 p-6">
       <div className="max-w-4xl mx-auto bg-white rounded-lg shadow-lg p-8 mb-10">
       <h1 className="text-3xl font-semibold mb-6">{isEdit ? 'Edit' : 'Add'} Employee</h1>
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} onKeyDown={handleKeyDown} className="space-y-6">
 
           {/* Personal Info */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { FaSort, FaSortUp, FaSortDown, FaPlus, FaChevronDown, FaChevronUp } from 'react-icons/fa';
 import axios from 'axios';
 
-// Invoice item type
+// Types
 type Item = {
   description: string;
   quantity: number;
@@ -24,15 +24,26 @@ type Invoice = {
     city: string;
   };
   items: Item[];
-  payment_method: number; // 0 for PayPal, 1 for Bank Transfer
+  payment_method: number; // 0 = PayPal, 1 = Bank Transfer
   total_amount: number;
 };
 
+type APIResponse = {
+  data: {
+    invoices: any[];
+    page: number;
+    per_page: number;
+    total: number;
+  };
+  message: string;
+  status: number;
+  success: boolean;
+};
 
 const InvoiceHistoryPage: FC = () => {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [error, setError] = useState<string>('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
   const [sortField, setSortField] = useState<keyof Invoice>('invoice_date');
@@ -42,57 +53,86 @@ const InvoiceHistoryPage: FC = () => {
   const perPage = 5;
 
   const role =
-    typeof window !== "undefined" ? localStorage.getItem("role") : null;
+    typeof window !== 'undefined' ? localStorage.getItem('role') : null;
   const permissions =
-    typeof window !== "undefined"
-      ? JSON.parse(localStorage.getItem("permissions") || "{}")
+    typeof window !== 'undefined'
+      ? JSON.parse(localStorage.getItem('permissions') || '{}')
       : {};
 
   const canViewInvoices =
-    role === "admin" || permissions["View Invoice details"] === 1;
+    role === 'admin' || permissions['View Invoice details'] === 1;
   const canGenerateInvoice =
-    role === "admin" || permissions["Generate invoice details"] === 1;
+    role === 'admin' || permissions['Generate invoice details'] === 1;
 
-  useEffect(() => {
-    const fetchInvoices = async () => {
-      setLoading(true);
-      try {
-        const response = await axios.post('http://127.0.0.1:5000/invoice/getlist', {
+  const fetchInvoices = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await axios.post<APIResponse>(
+        'http://127.0.0.1:5000/invoiceMHD/getlist',
+        {
           search,
           filterStatus,
           sortField,
           sortAsc,
           page,
           perPage,
-        });
-        // Update to match the structure of API response
-        setInvoices(response.data.invoices.map((invoice: any) => ({
-          id: invoice._id,
-          invoice_number: invoice.invoice_number,
-          invoice_date: invoice.invoice_date,
-          due_date: invoice.due_date,
-          bill_to: invoice.bill_to,
-          items: invoice.items,
-          payment_method: invoice.payment_method,
-          total_amount: invoice.total_amount
-        })));
-        setError('');
-      } catch (err) {
-        setError('Failed to fetch invoices');
-      } finally {
-        setLoading(false);
-      }
-    };
+        }
+      );
 
-    fetchInvoices();
+      if (response.data.success && Array.isArray(response.data.data.invoices)) {
+        const mapped = response.data.data.invoices.map((inv: any): Invoice => ({
+          id: inv._id,
+          invoice_number: inv.invoice_number,
+          invoice_date: inv.invoice_date,
+          due_date: inv.due_date,
+          bill_to: inv.bill_to,
+          items: inv.items,
+          payment_method: inv.payment_method,
+          total_amount: inv.total_amount,
+        }));
+        setInvoices(mapped);
+        setError('');
+      } else {
+        setError(response.data.message || 'Unexpected response from server');
+        console.warn('Unexpected response', response.data);
+      }
+    } catch (err: any) {
+      console.error('Fetch error:', err);
+      setError(err?.response?.data?.message || 'Failed to fetch invoices');
+    } finally {
+      setLoading(false);
+    }
   }, [search, filterStatus, sortField, sortAsc, page]);
 
+  useEffect(() => {
+    fetchInvoices();
+  }, [fetchInvoices]);
 
   const toggleRow = useCallback((id: string) => {
-    setExpandedRow(prev => (prev === id ? null : id)); // Toggle only the clicked row
+    setExpandedRow(prev => (prev === id ? null : id));
   }, []);
 
-  // Filter, search, sort
+  const handleSort = useCallback(
+    (field: keyof Invoice) => {
+      if (field === sortField) {
+        setSortAsc(prev => !prev);
+      } else {
+        setSortField(field);
+        setSortAsc(true);
+      }
+      setPage(1);
+    },
+    [sortField]
+  );
+
+  const handleSearch = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearch(e.target.value);
+    setPage(1);
+  }, []);
+
+  const handlePage = useCallback((n: number) => setPage(n), []);
+
+  // Filtering, sorting, pagination
   const filtered = useMemo(() => {
     let arr = invoices;
     if (search) {
@@ -109,25 +149,10 @@ const InvoiceHistoryPage: FC = () => {
       if (aVal > bVal) return sortAsc ? 1 : -1;
       return 0;
     });
-  }, [invoices, search, filterStatus, sortField, sortAsc]);
+  }, [invoices, search, sortField, sortAsc]);
 
   const totalPages = Math.ceil(filtered.length / perPage);
   const pageData = filtered.slice((page - 1) * perPage, page * perPage);
-
-  const handleSort = useCallback(
-    (field: keyof Invoice) => {
-      if (field === sortField) setSortAsc(prev => !prev);
-      else { setSortField(field); setSortAsc(true); }
-      setPage(1);
-    }, [sortField]
-  );
-
-  const handleSearch = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    setSearch(e.target.value);
-    setPage(1);
-  }, []);
-
-  const handlePage = useCallback((n: number) => setPage(n), []);
 
   return (
     <div className="min-h-screen bg-indigo-100 p-4">
@@ -147,7 +172,7 @@ const InvoiceHistoryPage: FC = () => {
           </div>
           {canGenerateInvoice && (
             <Link
-              href="/invoice/enoylitystudio/generate"
+              href="/invoice/mhdtech/generate"
               className="flex items-center justify-center px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
             >
               <FaPlus className="mr-2" /> Generate Invoice

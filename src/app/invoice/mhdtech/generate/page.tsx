@@ -13,7 +13,8 @@ interface Item {
 const GenerateInvoicePage: FC = () => {
   const router = useRouter();
 
-  const [date, setDate] = useState('');
+  const [billDate, setBillDate] = useState('');
+  const [dueDate, setDueDate] = useState('');
   const [clientName, setClientName] = useState('');
   const [clientAddress, setClientAddress] = useState('');
   const [clientCity, setClientCity] = useState('');
@@ -42,14 +43,16 @@ const GenerateInvoicePage: FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const formattedDate = new Date(date).toLocaleDateString('en-GB').split('/').join('-');
+    const bill_date = new Date(billDate).toLocaleDateString('en-GB').split('/').join('-');
+    const due_date = new Date(dueDate).toLocaleDateString('en-GB').split('/').join('-');
 
     const payload = {
       bill_to_name: clientName,
       bill_to_address: clientAddress,
       bill_to_city: clientCity,
       bill_to_email: clientEmail,
-      invoice_date: formattedDate,
+      invoice_date: bill_date,
+      due_date: due_date,
       payment_method: paymentMethod === 'PayPal' ? 0 : 1,
       items,
       notes,
@@ -57,7 +60,7 @@ const GenerateInvoicePage: FC = () => {
     };
 
     try {
-      const response = await fetch('http://localhost:5000/invoice/generate-invoice', {
+      const response = await fetch('http://localhost:5000/invoiceMHD/generate-invoice', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -79,18 +82,34 @@ const GenerateInvoicePage: FC = () => {
     }
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLFormElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+    }
+  };
+  
   return (
     <div className="min-h-screen bg-indigo-100 p-4">
       <div className="max-w-3xl mx-auto bg-white rounded-lg shadow p-6 mb-12">
         <h1 className="text-2xl font-semibold mb-4">Generate Invoice for MHD</h1>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} onKeyDown={handleKeyDown} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <label className="flex flex-col">
-              <span>Date</span>
+          <label className="flex flex-col">
+              <span>Bill Date</span>
               <input
                 type="date"
-                value={date}
-                onChange={e => setDate(e.target.value)}
+                value={billDate}
+                onChange={e => setBillDate(e.target.value)}
+                required
+                className="mt-1 px-3 py-2 border rounded-lg"
+              />
+            </label>
+            <label className="flex flex-col">
+              <span>Due Date</span>
+              <input
+                type="date"
+                value={dueDate}
+                onChange={e => setDueDate(e.target.value)}
                 required
                 className="mt-1 px-3 py-2 border rounded-lg"
               />
@@ -237,7 +256,7 @@ const GenerateInvoicePage: FC = () => {
             <button
               type="submit"
               className="px-4 py-2 bg-indigo-600 text-white rounded-lg"
-            >Submit</button>
+            >Generate</button>
           </div>
         </form>
       </div>

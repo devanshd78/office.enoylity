@@ -59,49 +59,63 @@ const InvoiceHistoryPage: FC = () => {
   const canGenerateInvoice =
     role === "admin" || permissions["Generate invoice details"] === 1;
 
-  const fetchInvoices = useCallback(async () => {
-    if (!canViewInvoices) return;
-
-    setLoading(true);
-    try {
-      const response = await axios.post(
-        "http://127.0.0.1:5000/invoiceEnoylity/getlist",
-        {
-          search,
-          sortField,
-          sortAsc,
-          page,
-          per_page: perPage,
-        }
-      );
-
-      const { invoices: raw, total } = response.data;
-
-      const parsed = raw.map((invoice: any): Invoice => ({
-        id: invoice._id,
-        invoice_number: invoice.invoice_number,
-        invoice_date: invoice.date,
-        due_date: invoice.due_date,
-        bill_to: {
-          name: invoice.client_name,
-          email: invoice.client_email,
-          address: invoice.client_address,
-          city: invoice.client_city,
-        },
-        items: invoice.items,
-        payment_method: invoice.payment_method,
-        total_amount: invoice.total,
-      }));
-
-      setInvoices(parsed);
-      setTotalPages(Math.ceil(total / perPage));
+    const fetchInvoices = useCallback(async () => {
+      if (!canViewInvoices) return;
+    
+      setLoading(true);
       setError("");
-    } catch (e) {
-      setError("Failed to fetch invoices");
-    } finally {
-      setLoading(false);
-    }
-  }, [search, sortField, sortAsc, page, canViewInvoices]);
+      try {
+        const response = await axios.post(
+          "http://127.0.0.1:5000/invoiceEnoylity/getlist",
+          {
+            search,
+            sortField,
+            sortAsc,
+            page,
+            per_page: perPage,
+          }
+        );
+    
+        const { invoices: raw, total } = response.data.data;
+        console.log(raw);
+        
+        const parsed = raw.map((invoice: any): Invoice => ({
+          id: invoice._id,
+          invoice_number: invoice.invoice_number,
+          invoice_date: invoice.date,
+          due_date: invoice.due_date,
+          bill_to: {
+            name: invoice.client_name,
+            email: invoice.client_email,
+            address: invoice.client_address,
+            city: invoice.client_city,
+          },
+          items: invoice.items,
+          payment_method: invoice.payment_method,
+          total_amount: invoice.total,
+        }));
+    
+        setInvoices(parsed);
+        setTotalPages(Math.ceil(total / perPage));
+      } catch (err: any) {
+        if (err.response) {
+          // Server responded with an error
+          setError(
+            err.response.data?.message ||
+            `Server Error: ${err.response.status}`
+          );
+        } else if (err.request) {
+          // Request made but no response
+          setError("Network error: Unable to reach the server.");
+        } else {
+          // Something else caused the error
+          setError("Unexpected error occurred.");
+        }
+      } finally {
+        setLoading(false);
+      }
+    }, [search, sortField, sortAsc, page, canViewInvoices]);
+    
 
   useEffect(() => {
     fetchInvoices();
