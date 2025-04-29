@@ -6,7 +6,21 @@ import { Lexend } from 'next/font/google';
 import { FiEye, FiEyeOff } from 'react-icons/fi';
 import Swal from 'sweetalert2';
 
+// ←— import your shared post helper
+import { post } from '../utils/apiClient';
+
 const lexend = Lexend({ subsets: ['latin'], weight: ['400', '700'] });
+
+type LoginResponse = {
+  success: boolean;
+  message?: string;
+  data: {
+    role: 'admin' | 'subadmin';
+    adminId?: string;
+    subadminId?: string;
+    permissions?: Record<string, any>;
+  };
+};
 
 const LoginPage: React.FC = () => {
   const [emailOrUsername, setEmailOrUsername] = useState('');
@@ -28,59 +42,47 @@ const LoginPage: React.FC = () => {
 
   if (!isMounted) return null;
 
-  const showError = (message: string) => {
-    Swal.fire({
-      icon: 'error',
-      title: 'Login Failed',
-      text: message,
-    });
-  };
-
-  const showSuccess = (message: string) => {
-    Swal.fire({
-      icon: 'success',
-      title: 'Login Successful',
-      text: message,
-      timer: 1500,
-      showConfirmButton: false,
-    });
-  };
+  const showError = (msg: string) =>
+    Swal.fire({ icon: 'error', title: 'Login Failed', text: msg });
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
 
-    if (!emailOrUsername || !password) {
+    if (!emailOrUsername.trim() || !password) {
       showError('Please fill in all fields.');
       setIsLoading(false);
       return;
     }
 
     try {
-      const response = await fetch('http://localhost:5000/admin/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          email: emailOrUsername.trim(),
-          password: password,
-        }),
+      // ←— use the post helper; it uses your NEXT_PUBLIC_API_BASE_URL
+      const result = await post<LoginResponse>('/admin/login', {
+        email: emailOrUsername.trim(),
+        password,
       });
 
-      const data = await response.json();
+      if (result.success) {
+        const { role, adminId, subadminId, permissions } = result.data;
 
-      if (response.ok && data.success) {
-        const role = data.data.role;
         localStorage.setItem('role', role);
         if (role === 'admin') {
-          localStorage.setItem('adminId', data.data.adminId);
-        } else if (role === 'subadmin') {
-          localStorage.setItem('subadminId', data.data.subadminId);
-          localStorage.setItem('permissions', JSON.stringify(data.data.permissions || {}));
+          localStorage.setItem('adminId', adminId!);
+        } else {
+          localStorage.setItem('subadminId', subadminId!);
+          localStorage.setItem('permissions', JSON.stringify(permissions || {}));
         }
 
-        setTimeout(() => router.replace('/'), 1500);
+        Swal.fire({
+          icon: 'success',
+          title: 'Login Successful',
+          text: 'Redirecting…',
+          timer: 1200,
+          showConfirmButton: false,
+        });
+        setTimeout(() => router.replace('/'), 1200);
       } else {
-        showError(data.message || 'Invalid credentials.');
+        showError(result.message || 'Invalid credentials.');
       }
     } catch (err) {
       console.error('Login error:', err);
@@ -105,7 +107,7 @@ const LoginPage: React.FC = () => {
       {/* Right side form panel */}
       <div className="flex-1 flex items-center justify-center p-6 bg-gray-100">
         <div className="w-full max-w-sm bg-white shadow-md rounded-lg p-8 space-y-5">
-          <h1 className="text-2xl font-bold text-center">Office Panel Login</h1>
+          <h1 className="text-2xl font-bold text-center">Enoylity Login</h1>
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div>

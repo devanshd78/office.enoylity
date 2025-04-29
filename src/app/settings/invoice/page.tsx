@@ -1,214 +1,177 @@
 "use client";
 
-import { useEffect, useState } from 'react';
-import axios from 'axios';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent } from '@/components/ui/card';
-import Swal from 'sweetalert2';
+import { useEffect, useState } from "react";
+import Swal from "sweetalert2";
+import { Card, CardContent } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { get, post } from "@/app/utils/apiClient";
 
-type CompanyInfo = {
-  name: string;
-  address: string;
-  city_state: string;
-  phone: string;
-  youtube: string;
-  email: string;
+type CompanyInfo = Record<string, string>;
+
+type EditableFields = {
+  company_info?: CompanyInfo;
+  bank_details?: CompanyInfo;
+  paypal_details?: CompanyInfo;
+  [key: string]: CompanyInfo | undefined;
 };
 
 type Settings = {
-  company_info: CompanyInfo;
-  colors: {
-    light_pink: [number, number, number];
-  };
-  logo_path: string;
+  settings_id: string;
+  invoice_type: string;
+  editable_fields: EditableFields;
 };
-
-const defaultSettings: Settings = {
-  company_info: {
-    name: '',
-    address: '',
-    city_state: '',
-    phone: '',
-    youtube: '',
-    email: '',
-  },
-  colors: {
-    light_pink: [255, 200, 200],
-  },
-  logo_path: '',
-};
-
-const companyOptions = [
-  { label: 'MHD Tech', value: 'mhd-tech' },
-  { label: 'Enoylity Studio', value: 'enoylity-studio' },
-  { label: 'Enoylity Media Creations LLC', value: 'enoylity-media' },
-];
 
 export default function InvoiceSettingsPage() {
-  const [selectedCompany, setSelectedCompany] = useState<string>('mhd-tech');
-  const [settings, setSettings] = useState<Settings>(defaultSettings);
+  const [settingsList, setSettingsList] = useState<Settings[]>([]);
+  const [selected, setSelected] = useState<Settings | null>(null);
   const [loading, setLoading] = useState(false);
-  const [logoPreview, setLogoPreview] = useState<string>('');
 
-  const getSettingsUrl = () => {
-    if (selectedCompany === 'mhd-tech') return 'http://127.0.0.1:5000/invoice/settings';
-    if (selectedCompany === 'enoylity-studio') return 'http://127.0.0.1:5000/invoiceEnoylity/settings';
-    if (selectedCompany === 'enoylity-media') return 'http://127.0.0.1:5000/enoylity/settings';
-    return '';
-  };
-
+  // 1️⃣ Load all available settings types
   useEffect(() => {
-    const fetchSettings = async () => {
+    (async () => {
       try {
-        const res = await axios.get(getSettingsUrl());
-
-        let data = res.data.data;
-        let normalized: Settings;
-
-        if (selectedCompany === 'mhd-tech') {
-          normalized = data; // already matches our format
-          setLogoPreview(`/static/${data.logo_path}`);
-        } else if (selectedCompany === 'enoylity-studio') {
-          normalized = {
-            company_info: {
-              name: data.company_details.company_name,
-              address: data.company_details.company_address,
-              city_state: '',
-              email: data.company_details.company_email,
-              phone: data.company_details.company_phone,
-              youtube: data.company_details.website,
-            },
-            colors: {
-              light_pink: [255, 200, 200], // placeholder
-            },
-            logo_path: data.assets.logo_url,
-          };
-          setLogoPreview(data.assets.logo_url);
-        } else if (selectedCompany === 'enoylity-media') {
-          normalized = {
-            company_info: {
-              name: data.company_details.company_name,
-              address: data.company_details.company_address,
-              city_state: '',
-              email: data.company_details.company_email,
-              phone: data.company_details.company_phone,
-              youtube: data.company_details.website,
-            },
-            colors: {
-              light_pink: [255, 200, 200], // placeholder
-            },
-            logo_path: data.assets.logo_url,
-          };
-          setLogoPreview(data.assets.logo_url);
-        }
-
-        setSettings(normalized);
-      } catch (err) {
-        Swal.fire('Error', 'Failed to load settings', 'error');
+        const res = await get<{ data: Settings[] }>("settings/getlist");
+        setSettingsList(res.data || []);
+      } catch {
+        Swal.fire("Error", "Could not fetch settings list.", "error");
       }
-    };
+    })();
+  }, []);
 
-    fetchSettings();
-  }, [selectedCompany]);
+  // 2️⃣ Whenever the list arrives, auto-select the first
+  useEffect(() => {
+    if (settingsList.length > 0 && !selected) {
+      loadSettings(settingsList[0].settings_id);
+    }
+  }, [settingsList]);
 
-  const handleCompanyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setSettings((prev) => ({
-      ...prev,
-      company_info: {
-        ...prev.company_info,
-        [name]: value,
-      },
-    }));
-  };
-
-  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const formData = new FormData();
-    formData.append('file', file);
-
+  // Fetch a single settings object by ID
+  const loadSettings = async (id: string) => {
+    setLoading(true);
     try {
-      const res = await axios.post(`http://127.0.0.1:5000/invoiceEnoylity/upload-logo/${selectedCompany}`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-      });
-      setSettings((prev) => ({ ...prev, logo_path: res.data.logo_url }));
-      setLogoPreview(`/static/${res.data.logo_url}`);
-      Swal.fire('Success', 'Logo uploaded', 'success');
+      const res = await get<{ data: Settings }>("settings/invoice", { settings_id: id });
+      setSelected(res.data);
     } catch {
-      Swal.fire('Error', 'Logo upload failed', 'error');
+      Swal.fire("Error", "Failed to load settings for that type.", "error");
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handleSubmit = async () => {
+  // Update a single field in the selected settings
+  const handleFieldChange = (
+    section: keyof EditableFields,
+    field: string,
+    value: string
+  ) => {
+    if (!selected) return;
+    setSelected({
+      ...selected,
+      editable_fields: {
+        ...selected.editable_fields,
+        [section]: {
+          ...selected.editable_fields[section],
+          [field]: value,
+        },
+      },
+    });
+  };
+
+  // Save the current `selected` back to the server
+  const handleSave = async () => {
+    if (!selected) return;
     setLoading(true);
+
+    // Build payload: include settings_id plus each editable section
+    const payload: any = { settings_id: selected.settings_id };
+    for (const [section, data] of Object.entries(selected.editable_fields)) {
+      if (data) payload[section] = data;
+    }
+
     try {
-      await axios.post(getSettingsUrl(), settings);
-      Swal.fire('Success', 'Settings updated successfully', 'success');
+      const res = await post<{ message?: string }>("settings/invoice", payload);
+      Swal.fire("Saved", res.message || "Invoice settings updated.", "success");
     } catch {
-      Swal.fire('Error', 'Update failed', 'error');
+      Swal.fire("Error", "Failed to update invoice settings.", "error");
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="max-w-2xl mx-auto mt-10">
+    <div className="max-w-3xl mx-auto mt-12 px-4">
       <Card>
-        <CardContent className="space-y-4 p-6">
-          <h2 className="text-xl font-semibold mb-2">{companyOptions.find(opt => opt.value === selectedCompany)?.label} Invoice Settings</h2>
+        <CardContent className="space-y-6">
+          <h1 className="text-2xl font-semibold">Invoice Settings</h1>
 
+          {/* Settings selector */}
           <div>
-            <Label htmlFor="company">Select Company</Label>
+            <Label htmlFor="settings-select">Invoice Type</Label>
             <select
-              id="company"
-              value={selectedCompany}
-              onChange={(e) => setSelectedCompany(e.target.value)}
+              id="settings-select"
               className="mt-1 w-full border rounded px-3 py-2"
+              disabled={loading}
+              value={selected?.settings_id || ""}
+              onChange={(e) => loadSettings(e.target.value)}
             >
-              {companyOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
+              {settingsList.map((s) => (
+                <option key={s.settings_id} value={s.settings_id}>
+                  {s.invoice_type}
                 </option>
               ))}
             </select>
           </div>
 
-          {[
-            { label: 'Company Name', name: 'name' },
-            { label: 'Address', name: 'address' },
-            { label: 'City, State', name: 'city_state' },
-            { label: 'Email', name: 'email' },
-            { label: 'Phone', name: 'phone' },
-            { label: 'YouTube', name: 'youtube' },
-          ].map((field) => (
-            <div key={field.name}>
-              <Label htmlFor={field.name}>{field.label}</Label>
-              <Input
-                id={field.name}
-                name={field.name}
-                value={settings.company_info[field.name as keyof CompanyInfo]}
-                onChange={handleCompanyChange}
-                className="mt-1"
-              />
-            </div>
-          ))}
-
-          {/* Uncomment to enable logo upload */}
-          {/* <div>
-            <Label htmlFor="logo">Company Logo</Label>
-            <Input type="file" accept="image/*" onChange={handleLogoUpload} className="mt-2" />
-            {logoPreview && (
-              <img src={logoPreview} alt="Logo preview" className="mt-4 max-h-24 object-contain" />
+          {/* Dynamic form */}
+          {selected &&
+            Object.entries(selected.editable_fields).map(
+              ([sectionKey, fields]) =>
+                fields && (
+                  <div key={sectionKey} className="pt-4">
+                    <h2 className="text-lg font-medium mb-2">
+                      {sectionKey
+                        .split("_")
+                        .map((w) => w[0].toUpperCase() + w.slice(1))
+                        .join(" ")}
+                    </h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {Object.entries(fields).map(([field, val]) => (
+                        <div key={field}>
+                          <Label htmlFor={`${sectionKey}-${field}`}>
+                            {field
+                              .split("_")
+                              .map((w) => w[0].toUpperCase() + w.slice(1))
+                              .join(" ")}
+                          </Label>
+                          <Input
+                            id={`${sectionKey}-${field}`}
+                            name={field}
+                            value={val}
+                            disabled={loading}
+                            onChange={(e) =>
+                              handleFieldChange(
+                                sectionKey as keyof EditableFields,
+                                field,
+                                e.target.value
+                              )
+                            }
+                            className="mt-1"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
             )}
-          </div> */}
 
-          <Button onClick={handleSubmit} disabled={loading}>
-            {loading ? 'Saving...' : 'Save Settings'}
-          </Button>
+          {/* Save */}
+          <div className="pt-6">
+            <Button onClick={handleSave} disabled={loading} className="w-full">
+              {loading ? "Saving…" : "Save Settings"}
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>

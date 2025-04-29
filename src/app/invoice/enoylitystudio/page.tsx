@@ -10,7 +10,8 @@ import {
   FaChevronDown,
   FaChevronUp,
 } from "react-icons/fa";
-import axios from "axios";
+import { post } from "@/app/utils/apiClient";
+
 
 type Item = {
   description: string;
@@ -32,6 +33,15 @@ type Invoice = {
   items: Item[];
   payment_method: number;
   total_amount: number;
+};
+
+type ListResp = {
+  success: boolean;
+  message?: string;
+  data: {
+    invoices: any[];
+    total: number;
+  };
 };
 
 const InvoiceHistoryPage: FC = () => {
@@ -59,26 +69,24 @@ const InvoiceHistoryPage: FC = () => {
   const canGenerateInvoice =
     role === "admin" || permissions["Generate invoice details"] === 1;
 
-    const fetchInvoices = useCallback(async () => {
-      if (!canViewInvoices) return;
-    
-      setLoading(true);
-      setError("");
-      try {
-        const response = await axios.post(
-          "http://127.0.0.1:5000/invoiceEnoylity/getlist",
-          {
-            search,
-            sortField,
-            sortAsc,
-            page,
-            per_page: perPage,
-          }
-        );
-    
-        const { invoices: raw, total } = response.data.data;
-        console.log(raw);
-        
+  const fetchInvoices = useCallback(async () => {
+    if (!canViewInvoices) return;
+
+    setLoading(true);
+    setError("");
+    try {
+      const result = await post<ListResp>("/invoiceEnoylity/getlist", {
+        search,
+        sortField,
+        sortAsc,
+        page,
+        per_page: perPage,
+      });
+
+      if (!result.success) {
+        setError(result.message || "Failed to load invoices.");
+      } else {
+        const raw = result.data.invoices;
         const parsed = raw.map((invoice: any): Invoice => ({
           id: invoice._id,
           invoice_number: invoice.invoice_number,
@@ -94,36 +102,27 @@ const InvoiceHistoryPage: FC = () => {
           payment_method: invoice.payment_method,
           total_amount: invoice.total,
         }));
-    
         setInvoices(parsed);
-        setTotalPages(Math.ceil(total / perPage));
-      } catch (err: any) {
-        if (err.response) {
-          // Server responded with an error
-          setError(
-            err.response.data?.message ||
-            `Server Error: ${err.response.status}`
-          );
-        } else if (err.request) {
-          // Request made but no response
-          setError("Network error: Unable to reach the server.");
-        } else {
-          // Something else caused the error
-          setError("Unexpected error occurred.");
-        }
-      } finally {
-        setLoading(false);
+        setTotalPages(Math.ceil(result.data.total / perPage));
       }
-    }, [search, sortField, sortAsc, page, canViewInvoices]);
-    
+    } catch (err: any) {
+      setError(
+        err.message ||
+          (err.response?.data?.message
+            ? err.response.data.message
+            : "Network or server error.")
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [search, sortField, sortAsc, page, canViewInvoices]);
 
   useEffect(() => {
     fetchInvoices();
   }, [fetchInvoices]);
 
-  const toggleRow = (id: string) => {
+  const toggleRow = (id: string) =>
     setExpandedRow((prev) => (prev === id ? null : id));
-  };
 
   const handleSort = (field: keyof Invoice) => {
     if (field === sortField) setSortAsc((prev) => !prev);
@@ -140,9 +139,7 @@ const InvoiceHistoryPage: FC = () => {
   };
 
   const handlePageChange = (newPage: number) => {
-    if (newPage >= 1 && newPage <= totalPages) {
-      setPage(newPage);
-    }
+    if (newPage >= 1 && newPage <= totalPages) setPage(newPage);
   };
 
   return (
@@ -152,7 +149,7 @@ const InvoiceHistoryPage: FC = () => {
           Enoylity Studio Invoice History
         </h1>
 
-        {/* Top Controls */}
+        {/* Controls */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 space-y-4 sm:space-y-0">
           <input
             type="text"
@@ -164,14 +161,14 @@ const InvoiceHistoryPage: FC = () => {
           {canGenerateInvoice && (
             <Link
               href="/invoice/enoylitystudio/generate"
-              className="flex items-center justify-center px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+              className="flex items-center px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
             >
               <FaPlus className="mr-2" /> Generate Invoice
             </Link>
           )}
         </div>
 
-        {/* Error / Loading */}
+        {/* Feedback */}
         {error && <div className="text-red-500 text-center mb-4">{error}</div>}
         {loading ? (
           <div className="text-center py-4">Loading...</div>
@@ -180,34 +177,64 @@ const InvoiceHistoryPage: FC = () => {
             You do not have permission to view invoices.
           </div>
         ) : invoices.length === 0 ? (
-          <div className="text-center py-4 text-gray-600">No invoices found.</div>
+          <div className="text-center py-4 text-gray-600">
+            No invoices found.
+          </div>
         ) : (
           <>
-            {/* Mobile View */}
+            {/* Mobile */}
             <div className="sm:hidden">
               {invoices.map((inv) => (
-                <div key={inv.id} className="bg-white p-4 mb-4 rounded-lg shadow">
+                <div
+                  key={inv.id}
+                  className="bg-white p-4 mb-4 rounded-lg shadow"
+                >
                   <div className="flex justify-between items-center">
                     <div>
-                      <h2 className="text-lg font-semibold">{inv.invoice_number}</h2>
-                      <p className="text-sm text-gray-500">{inv.invoice_date}</p>
+                      <h2 className="text-lg font-semibold">
+                        {inv.invoice_number}
+                      </h2>
+                      <p className="text-sm text-gray-500">
+                        {inv.invoice_date}
+                      </p>
                     </div>
                     <button onClick={() => toggleRow(inv.id)}>
-                      {expandedRow === inv.id ? <FaChevronUp /> : <FaChevronDown />}
+                      {expandedRow === inv.id ? (
+                        <FaChevronUp />
+                      ) : (
+                        <FaChevronDown />
+                      )}
                     </button>
                   </div>
                   {expandedRow === inv.id && (
                     <div className="mt-3 space-y-2 text-sm">
-                      <p><b>Client:</b> {inv.bill_to.name}</p>
-                      <p><b>Email:</b> {inv.bill_to.email}</p>
-                      <p><b>Total:</b> ₹ {inv.total_amount.toFixed(2)}</p>
-                      <p><b>Due:</b> {inv.due_date}</p>
-                      <p><b>Payment:</b> {inv.payment_method === 0 ? "PayPal" : "Bank Transfer"}</p>
-                      <p><b>Items:</b></p>
+                      <p>
+                        <b>Client:</b> {inv.bill_to.name}
+                      </p>
+                      <p>
+                        <b>Email:</b> {inv.bill_to.email}
+                      </p>
+                      <p>
+                        <b>Total:</b> ₹ {inv.total_amount.toFixed(2)}
+                      </p>
+                      <p>
+                        <b>Due:</b> {inv.due_date}
+                      </p>
+                      <p>
+                        <b>Payment:</b>{" "}
+                        {inv.payment_method === 0
+                          ? "PayPal"
+                          : "Bank Transfer"}
+                      </p>
+                      <p>
+                        <b>Items:</b>
+                      </p>
                       <table className="w-full text-xs border mt-1">
                         <thead className="bg-gray-100">
                           <tr>
-                            <th className="px-2 py-1 text-left">Description</th>
+                            <th className="px-2 py-1 text-left">
+                              Description
+                            </th>
                             <th className="px-2 py-1">Qty</th>
                             <th className="px-2 py-1">Price</th>
                           </tr>
@@ -215,9 +242,15 @@ const InvoiceHistoryPage: FC = () => {
                         <tbody>
                           {inv.items.map((item, idx) => (
                             <tr key={idx} className="border-t">
-                              <td className="px-2 py-1">{item.description}</td>
-                              <td className="px-2 py-1 text-center">{item.quantity}</td>
-                              <td className="px-2 py-1 text-right">₹ {item.price.toFixed(2)}</td>
+                              <td className="px-2 py-1">
+                                {item.description}
+                              </td>
+                              <td className="px-2 py-1 text-center">
+                                {item.quantity}
+                              </td>
+                              <td className="px-2 py-1 text-right">
+                                ₹ {item.price.toFixed(2)}
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -228,19 +261,43 @@ const InvoiceHistoryPage: FC = () => {
               ))}
             </div>
 
-            {/* Desktop Table */}
+            {/* Desktop */}
             <div className="hidden sm:block overflow-x-auto">
               <table className="min-w-full bg-white border">
                 <thead className="bg-gray-100">
                   <tr>
-                    <th className="px-3 py-2 text-left cursor-pointer" onClick={() => handleSort("invoice_number")}>
+                    <th
+                      className="px-3 py-2 text-left cursor-pointer"
+                      onClick={() => handleSort("invoice_number")}
+                    >
                       <div className="flex items-center">
-                        Invoice Number {sortField === "invoice_number" ? (sortAsc ? <FaSortUp /> : <FaSortDown />) : <FaSort className="text-gray-400" />}
+                        Invoice Number{" "}
+                        {sortField === "invoice_number" ? (
+                          sortAsc ? (
+                            <FaSortUp />
+                          ) : (
+                            <FaSortDown />
+                          )
+                        ) : (
+                          <FaSort className="text-gray-400" />
+                        )}
                       </div>
                     </th>
-                    <th className="px-3 py-2 text-left cursor-pointer" onClick={() => handleSort("invoice_date")}>
+                    <th
+                      className="px-3 py-2 text-left cursor-pointer"
+                      onClick={() => handleSort("invoice_date")}
+                    >
                       <div className="flex items-center">
-                        Date {sortField === "invoice_date" ? (sortAsc ? <FaSortUp /> : <FaSortDown />) : <FaSort className="text-gray-400" />}
+                        Date{" "}
+                        {sortField === "invoice_date" ? (
+                          sortAsc ? (
+                            <FaSortUp />
+                          ) : (
+                            <FaSortDown />
+                          )
+                        ) : (
+                          <FaSort className="text-gray-400" />
+                        )}
                       </div>
                     </th>
                     <th className="px-3 py-2">Client</th>
@@ -256,11 +313,21 @@ const InvoiceHistoryPage: FC = () => {
                         <td className="px-3 py-2">{inv.invoice_number}</td>
                         <td className="px-3 py-2">{inv.invoice_date}</td>
                         <td className="px-3 py-2">{inv.bill_to.name}</td>
-                        <td className="px-3 py-2">₹ {inv.total_amount.toFixed(2)}</td>
-                        <td className="px-3 py-2">{inv.payment_method === 0 ? "PayPal" : "Bank Transfer"}</td>
+                        <td className="px-3 py-2">
+                          ₹ {inv.total_amount.toFixed(2)}
+                        </td>
+                        <td className="px-3 py-2">
+                          {inv.payment_method === 0
+                            ? "PayPal"
+                            : "Bank Transfer"}
+                        </td>
                         <td className="px-3 py-2">
                           <button onClick={() => toggleRow(inv.id)}>
-                            {expandedRow === inv.id ? <FaChevronUp /> : <FaChevronDown />}
+                            {expandedRow === inv.id ? (
+                              <FaChevronUp />
+                            ) : (
+                              <FaChevronDown />
+                            )}
                           </button>
                         </td>
                       </tr>
@@ -271,7 +338,9 @@ const InvoiceHistoryPage: FC = () => {
                               <table className="w-full text-sm">
                                 <thead className="bg-gray-200">
                                   <tr>
-                                    <th className="px-2 py-1 text-left">Description</th>
+                                    <th className="px-2 py-1 text-left">
+                                      Description
+                                    </th>
                                     <th className="px-2 py-1">Qty</th>
                                     <th className="px-2 py-1">Price</th>
                                   </tr>
@@ -279,9 +348,15 @@ const InvoiceHistoryPage: FC = () => {
                                 <tbody>
                                   {inv.items.map((item, idx) => (
                                     <tr key={idx} className="border-t">
-                                      <td className="px-2 py-1">{item.description}</td>
-                                      <td className="px-2 py-1 text-center">{item.quantity}</td>
-                                      <td className="px-2 py-1 text-right">₹ {item.price.toFixed(2)}</td>
+                                      <td className="px-2 py-1">
+                                        {item.description}
+                                      </td>
+                                      <td className="px-2 py-1 text-center">
+                                        {item.quantity}
+                                      </td>
+                                      <td className="px-2 py-1 text-right">
+                                        ₹ {item.price.toFixed(2)}
+                                      </td>
                                     </tr>
                                   ))}
                                 </tbody>
@@ -309,7 +384,9 @@ const InvoiceHistoryPage: FC = () => {
                 <button
                   key={i}
                   onClick={() => handlePageChange(i + 1)}
-                  className={`px-3 py-1 border rounded ${page === i + 1 ? "bg-indigo-200" : ""}`}
+                  className={`px-3 py-1 border rounded ${
+                    page === i + 1 ? "bg-indigo-200" : ""
+                  }`}
                 >
                   {i + 1}
                 </button>

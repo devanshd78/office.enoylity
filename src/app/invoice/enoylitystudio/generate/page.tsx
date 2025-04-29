@@ -1,296 +1,409 @@
 "use client";
 
-import React, { FC, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import React, { FC, useState, useEffect, useCallback } from "react";
+import Link from "next/link";
+import {
+  FaSort,
+  FaSortUp,
+  FaSortDown,
+  FaPlus,
+  FaChevronDown,
+  FaChevronUp,
+} from "react-icons/fa";
+import { post } from "@/app/utils/apiClient";
 
-interface Item {
+
+type Item = {
   description: string;
   quantity: number;
   price: number;
-}
+};
 
-const GenerateInvoicePage: FC = () => {
-  const router = useRouter();
-
-  const [date, setDate] = useState('');
-  const [clientName, setClientName] = useState('');
-  const [clientAddress, setClientAddress] = useState('');
-  const [clientCity, setClientCity] = useState('');
-  const [clientEmail, setClientEmail] = useState('');
-  const [clientPhone, setClientPhone] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'' | 'PayPal' | 'Bank Transfer'>('');
-  const [bankName, setBankName] = useState('');
-  const [bankAccount, setBankAccount] = useState('');
-  const [items, setItems] = useState<Item[]>([{ description: '', quantity: 0, price: 0 }]);
-  const [notes, setNotes] = useState('');
-
-  const handleAddItem = () => {
-    setItems(prev => [...prev, { description: '', quantity: 1, price: 0 }]);
+type Invoice = {
+  id: string;
+  invoice_number: string;
+  invoice_date: string;
+  due_date: string;
+  bill_to: {
+    name: string;
+    email: string;
+    address: string;
+    city: string;
   };
+  items: Item[];
+  payment_method: number;
+  total_amount: number;
+};
 
-  const handleRemoveItem = (index: number) => {
-    if (items.length > 1) {
-      setItems(prev => prev.filter((_, i) => i !== index));
-    }
+type ListResp = {
+  success: boolean;
+  message?: string;
+  data: {
+    invoices: any[];
+    total: number;
   };
+};
 
-  const handleItemChange = (index: number, field: keyof Item, value: string | number) => {
-    setItems(prev =>
-      prev.map((it, i) => i === index ? { ...it, [field]: field === 'description' ? value : Number(value) } : it)
-    );
-  };
+const InvoiceHistoryPage: FC = () => {
+  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [search, setSearch] = useState("");
+  const [sortField, setSortField] = useState<keyof Invoice>("invoice_date");
+  const [sortAsc, setSortAsc] = useState<boolean>(false);
+  const [page, setPage] = useState<number>(1);
+  const [totalPages, setTotalPages] = useState<number>(1);
+  const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const perPage = 5;
 
-    // Validation for required fields if Bank Transfer is selected
-    if (
-      !date || !clientName || !clientAddress || !clientEmail || !paymentMethod ||
-      items.length === 0 || (paymentMethod === 'Bank Transfer' && (!bankName || !bankAccount))
-    ) {
-      alert('Please fill all required fields.');
-      return;
-    }
+  const role =
+    typeof window !== "undefined" ? localStorage.getItem("role") : null;
+  const permissions =
+    typeof window !== "undefined"
+      ? JSON.parse(localStorage.getItem("permissions") || "{}")
+      : {};
 
-    const formattedDate = new Date(date).toLocaleDateString('en-GB').split('/').join('-');
+  const canViewInvoices =
+    role === "admin" || permissions["View Invoice details"] === 1;
+  const canGenerateInvoice =
+    role === "admin" || permissions["Generate invoice details"] === 1;
 
-    const payload: any = {
-      date: formattedDate,
-      client_name: clientName,
-      client_address: clientAddress,
-      client_city: clientCity,
-      client_email: clientEmail,
-      phone: clientPhone,
-      payment_method: paymentMethod === 'PayPal' ? 0 : 1,
-      items,
-      notes,
-    };
+  const fetchInvoices = useCallback(async () => {
+    if (!canViewInvoices) return;
 
-    if (paymentMethod === 'Bank Transfer') {
-      payload.bank_name = bankName;
-      payload.bank_account = bankAccount;
-    }
-
+    setLoading(true);
+    setError("");
     try {
-      const response = await fetch('http://localhost:5000/invoiceEnoylity/generate-invoice', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+      const result = await post<ListResp>("/invoiceEnoylity/getlist", {
+        search,
+        sortField,
+        sortAsc,
+        page,
+        per_page: perPage,
       });
 
-      if (!response.ok) throw new Error('Failed to generate invoice');
-
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `invoice.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      router.push('/invoice/enoylitystudio');
-    } catch (error) {
-      alert('Error generating invoice');
-      console.error(error);
+      if (!result.success) {
+        setError(result.message || "Failed to load invoices.");
+      } else {
+        const raw = result.data.invoices;
+        const parsed = raw.map((invoice: any): Invoice => ({
+          id: invoice._id,
+          invoice_number: invoice.invoice_number,
+          invoice_date: invoice.date,
+          due_date: invoice.due_date,
+          bill_to: {
+            name: invoice.client_name,
+            email: invoice.client_email,
+            address: invoice.client_address,
+            city: invoice.client_city,
+          },
+          items: invoice.items,
+          payment_method: invoice.payment_method,
+          total_amount: invoice.total,
+        }));
+        setInvoices(parsed);
+        setTotalPages(Math.ceil(result.data.total / perPage));
+      }
+    } catch (err: any) {
+      setError(
+        err.message ||
+          (err.response?.data?.message
+            ? err.response.data.message
+            : "Network or server error.")
+      );
+    } finally {
+      setLoading(false);
     }
+  }, [search, sortField, sortAsc, page, canViewInvoices]);
+
+  useEffect(() => {
+    fetchInvoices();
+  }, [fetchInvoices]);
+
+  const toggleRow = (id: string) =>
+    setExpandedRow((prev) => (prev === id ? null : id));
+
+  const handleSort = (field: keyof Invoice) => {
+    if (field === sortField) setSortAsc((prev) => !prev);
+    else {
+      setSortField(field);
+      setSortAsc(true);
+    }
+    setPage(1);
   };
 
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLFormElement>) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-      }
-    };
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setSearch(e.target.value);
+    setPage(1);
+  };
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) setPage(newPage);
+  };
 
   return (
     <div className="min-h-screen bg-indigo-100 p-4">
-      <div className="max-w-3xl mx-auto bg-white rounded-lg shadow p-6 mb-12">
-        <h1 className="text-2xl font-semibold mb-4">Generate Invoice for Enoylity Studio</h1>
-        <form onSubmit={handleSubmit} onKeyDown={handleKeyDown} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <label className="flex flex-col">
-              <span>Date</span>
-              <input
-                type="date"
-                value={date}
-                onChange={e => setDate(e.target.value)}
-                required
-                className="mt-1 px-3 py-2 border rounded-lg"
-              />
-            </label>
-          </div>
+      <div className="max-w-6xl mx-auto bg-white rounded-lg shadow p-6 flex flex-col">
+        <h1 className="text-2xl font-semibold mb-4">
+          Enoylity Studio Invoice History
+        </h1>
 
-          <div className="space-y-2">
-            <h2 className="font-bold">Client Information</h2>
-            <label className="flex flex-col">
-              <span>Name</span>
-              <input
-                type="text"
-                value={clientName}
-                onChange={e => setClientName(e.target.value)}
-                required
-                className="mt-1 px-3 py-2 border rounded-lg"
-              />
-            </label>
-            <label className="flex flex-col">
-              <span>Address</span>
-              <input
-                type="text"
-                value={clientAddress}
-                onChange={e => setClientAddress(e.target.value)}
-                required
-                className="mt-1 px-3 py-2 border rounded-lg"
-              />
-            </label>
-            <label className="flex flex-col">
-              <span>City</span>
-              <input
-                type="text"
-                value={clientCity}
-                onChange={e => setClientCity(e.target.value)}
-                required
-                className="mt-1 px-3 py-2 border rounded-lg"
-              />
-            </label>
-            <label className="flex flex-col">
-              <span>Email</span>
-              <input
-                type="email"
-                value={clientEmail}
-                onChange={e => setClientEmail(e.target.value)}
-                required
-                className="mt-1 px-3 py-2 border rounded-lg"
-              />
-            </label>
-            <label className="flex flex-col">
-              <span>Phone</span>
-              <input
-                type="tel"
-                value={clientPhone}
-                onChange={e => setClientPhone(e.target.value)}
-                className="mt-1 px-3 py-2 border rounded-lg"
-              />
-            </label>
-          </div>
-
-          <label className="flex flex-col">
-            <span>Payment Method</span>
-            <select
-              value={paymentMethod}
-              onChange={e => setPaymentMethod(e.target.value as 'PayPal' | 'Bank Transfer')}
-              required
-              className="mt-1 px-3 py-2 border rounded-lg"
-            >
-              <option value="" disabled>Select Payment Method</option>
-              <option value="PayPal">PayPal</option>
-              <option value="Bank Transfer">Bank Transfer</option>
-            </select>
-          </label>
-
-          {paymentMethod === 'Bank Transfer' && (
-            <div className="space-y-2">
-              <label className="flex flex-col">
-                <span>Bank Name</span>
-                <input
-                  type="text"
-                  value={bankName}
-                  onChange={e => setBankName(e.target.value)}
-                  required
-                  className="mt-1 px-3 py-2 border rounded-lg"
-                />
-              </label>
-              <label className="flex flex-col">
-                <span>Bank Account</span>
-                <input
-                  type="text"
-                  value={bankAccount}
-                  onChange={e => setBankAccount(e.target.value)}
-                  required
-                  className="mt-1 px-3 py-2 border rounded-lg"
-                />
-              </label>
-            </div>
-          )}
-
-          <div className="space-y-2">
-            <h2 className="font-medium">Items</h2>
-            {items.map((it, idx) => (
-              <div key={idx} className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
-                <label className="flex flex-col sm:col-span-2">
-                  <span>Description</span>
-                  <input
-                    type="text"
-                    value={it.description}
-                    onChange={e => handleItemChange(idx, 'description', e.target.value)}
-                    required
-                    className="mt-1 px-3 py-2 border rounded-lg"
-                  />
-                </label>
-                {items.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveItem(idx)}
-                    className="px-3 py-2 bg-red-500 text-white rounded-lg w-full"
-                  >Remove</button>
-                )}
-                <label className="flex flex-col">
-                  <span>Qty</span>
-                  <input
-                    type="number"
-                    min={1}
-                    value={it.quantity}
-                    onChange={e => handleItemChange(idx, 'quantity', Number(e.target.value))}
-                    className="mt-1 px-3 py-2 border rounded-lg"
-                  />
-                </label>
-                <label className="flex flex-col">
-                  <span>Price</span>
-                  <div className="mt-1 flex rounded-lg border overflow-hidden">
-                    <span className="px-3 py-2">$</span>
-                    <input
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      value={it.price}
-                      onChange={e => handleItemChange(idx, 'price', Number(e.target.value))}
-                      className="px-3 py-2 flex-1 outline-none"
-                    />
-                  </div>
-                </label>
-              </div>
-            ))}
-            <button
-              type="button"
-              onClick={handleAddItem}
-              className="mt-2 px-4 py-2 bg-indigo-600 text-white rounded-lg"
-            >Add Item</button>
-          </div>
-
-          <label className="flex flex-col">
-            <span>Notes</span>
-            <textarea
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              className="mt-1 px-3 py-2 border rounded-lg"
-              rows={3}
-              required
-            />
-          </label>
-
-          <div className="flex justify-end space-x-4">
+        {/* Controls */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 space-y-4 sm:space-y-0">
+          <input
+            type="text"
+            placeholder="Search by ID or client"
+            value={search}
+            onChange={handleSearchChange}
+            className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500 w-full sm:w-64"
+          />
+          {canGenerateInvoice && (
             <Link
-              href="/invoice/enoylitystudio"
-              className="px-4 py-2 border rounded-lg"
-            >Cancel</Link>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-indigo-600 text-white rounded-lg"
-            >Generate</button>
+              href="/invoice/enoylitystudio/generate"
+              className="flex items-center px-5 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+            >
+              <FaPlus className="mr-2" /> Generate Invoice
+            </Link>
+          )}
+        </div>
+
+        {/* Feedback */}
+        {error && <div className="text-red-500 text-center mb-4">{error}</div>}
+        {loading ? (
+          <div className="text-center py-4">Loading...</div>
+        ) : !canViewInvoices ? (
+          <div className="text-center py-4 text-gray-600">
+            You do not have permission to view invoices.
           </div>
-        </form>
+        ) : invoices.length === 0 ? (
+          <div className="text-center py-4 text-gray-600">
+            No invoices found.
+          </div>
+        ) : (
+          <>
+            {/* Mobile */}
+            <div className="sm:hidden">
+              {invoices.map((inv) => (
+                <div
+                  key={inv.id}
+                  className="bg-white p-4 mb-4 rounded-lg shadow"
+                >
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h2 className="text-lg font-semibold">
+                        {inv.invoice_number}
+                      </h2>
+                      <p className="text-sm text-gray-500">
+                        {inv.invoice_date}
+                      </p>
+                    </div>
+                    <button onClick={() => toggleRow(inv.id)}>
+                      {expandedRow === inv.id ? (
+                        <FaChevronUp />
+                      ) : (
+                        <FaChevronDown />
+                      )}
+                    </button>
+                  </div>
+                  {expandedRow === inv.id && (
+                    <div className="mt-3 space-y-2 text-sm">
+                      <p>
+                        <b>Client:</b> {inv.bill_to.name}
+                      </p>
+                      <p>
+                        <b>Email:</b> {inv.bill_to.email}
+                      </p>
+                      <p>
+                        <b>Total:</b> ₹ {inv.total_amount.toFixed(2)}
+                      </p>
+                      <p>
+                        <b>Due:</b> {inv.due_date}
+                      </p>
+                      <p>
+                        <b>Payment:</b>{" "}
+                        {inv.payment_method === 0
+                          ? "PayPal"
+                          : "Bank Transfer"}
+                      </p>
+                      <p>
+                        <b>Items:</b>
+                      </p>
+                      <table className="w-full text-xs border mt-1">
+                        <thead className="bg-gray-100">
+                          <tr>
+                            <th className="px-2 py-1 text-left">
+                              Description
+                            </th>
+                            <th className="px-2 py-1">Qty</th>
+                            <th className="px-2 py-1">Price</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {inv.items.map((item, idx) => (
+                            <tr key={idx} className="border-t">
+                              <td className="px-2 py-1">
+                                {item.description}
+                              </td>
+                              <td className="px-2 py-1 text-center">
+                                {item.quantity}
+                              </td>
+                              <td className="px-2 py-1 text-right">
+                                ₹ {item.price.toFixed(2)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="min-w-full bg-white border">
+                <thead className="bg-gray-100">
+                  <tr>
+                    <th
+                      className="px-3 py-2 text-left cursor-pointer"
+                      onClick={() => handleSort("invoice_number")}
+                    >
+                      <div className="flex items-center">
+                        Invoice Number{" "}
+                        {sortField === "invoice_number" ? (
+                          sortAsc ? (
+                            <FaSortUp />
+                          ) : (
+                            <FaSortDown />
+                          )
+                        ) : (
+                          <FaSort className="text-gray-400" />
+                        )}
+                      </div>
+                    </th>
+                    <th
+                      className="px-3 py-2 text-left cursor-pointer"
+                      onClick={() => handleSort("invoice_date")}
+                    >
+                      <div className="flex items-center">
+                        Date{" "}
+                        {sortField === "invoice_date" ? (
+                          sortAsc ? (
+                            <FaSortUp />
+                          ) : (
+                            <FaSortDown />
+                          )
+                        ) : (
+                          <FaSort className="text-gray-400" />
+                        )}
+                      </div>
+                    </th>
+                    <th className="px-3 py-2">Client</th>
+                    <th className="px-3 py-2">Total</th>
+                    <th className="px-3 py-2">Payment</th>
+                    <th className="px-3 py-2">Details</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {invoices.map((inv) => (
+                    <React.Fragment key={inv.id}>
+                      <tr className="border-t hover:bg-gray-50">
+                        <td className="px-3 py-2">{inv.invoice_number}</td>
+                        <td className="px-3 py-2">{inv.invoice_date}</td>
+                        <td className="px-3 py-2">{inv.bill_to.name}</td>
+                        <td className="px-3 py-2">
+                          ₹ {inv.total_amount.toFixed(2)}
+                        </td>
+                        <td className="px-3 py-2">
+                          {inv.payment_method === 0
+                            ? "PayPal"
+                            : "Bank Transfer"}
+                        </td>
+                        <td className="px-3 py-2">
+                          <button onClick={() => toggleRow(inv.id)}>
+                            {expandedRow === inv.id ? (
+                              <FaChevronUp />
+                            ) : (
+                              <FaChevronDown />
+                            )}
+                          </button>
+                        </td>
+                      </tr>
+                      {expandedRow === inv.id && (
+                        <tr className="border-b bg-gray-50">
+                          <td colSpan={6}>
+                            <div className="overflow-x-auto px-2 py-2">
+                              <table className="w-full text-sm">
+                                <thead className="bg-gray-200">
+                                  <tr>
+                                    <th className="px-2 py-1 text-left">
+                                      Description
+                                    </th>
+                                    <th className="px-2 py-1">Qty</th>
+                                    <th className="px-2 py-1">Price</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {inv.items.map((item, idx) => (
+                                    <tr key={idx} className="border-t">
+                                      <td className="px-2 py-1">
+                                        {item.description}
+                                      </td>
+                                      <td className="px-2 py-1 text-center">
+                                        {item.quantity}
+                                      </td>
+                                      <td className="px-2 py-1 text-right">
+                                        ₹ {item.price.toFixed(2)}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            <div className="mt-4 flex justify-center space-x-2">
+              <button
+                onClick={() => handlePageChange(page - 1)}
+                disabled={page === 1}
+                className="px-3 py-1 border rounded disabled:opacity-50"
+              >
+                Prev
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => (
+                <button
+                  key={i}
+                  onClick={() => handlePageChange(i + 1)}
+                  className={`px-3 py-1 border rounded ${
+                    page === i + 1 ? "bg-indigo-200" : ""
+                  }`}
+                >
+                  {i + 1}
+                </button>
+              ))}
+              <button
+                onClick={() => handlePageChange(page + 1)}
+                disabled={page === totalPages}
+                className="px-3 py-1 border rounded disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
 };
 
-export default GenerateInvoicePage;
+export default InvoiceHistoryPage;

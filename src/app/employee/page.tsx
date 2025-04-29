@@ -10,11 +10,11 @@ import {
   FaChevronDown,
   FaChevronUp,
   FaEdit,
-  FaTrash,
-  FaEye,
+  FaTrash
 } from 'react-icons/fa';
 import { useRouter } from 'next/navigation';
 import Swal from 'sweetalert2';
+import { post } from '../utils/apiClient';
 
 export interface Employee {
   employeeId: string;
@@ -40,7 +40,7 @@ const COLUMNS: Array<keyof Employee> = [
   'email',
   'phone',
   'department',
-  'designation',
+  'designation'
 ];
 
 export default function EmployeesPage() {
@@ -56,21 +56,21 @@ export default function EmployeesPage() {
   const [permissions, setPermissions] = useState<Record<string, number>>({});
 
   // Permissions
-useEffect(() => {
-  const storedRole = localStorage.getItem('role');
-  const storedPermissions = JSON.parse(localStorage.getItem('permissions') || '{}');
-  setRole(storedRole);
-  setPermissions(storedPermissions);
-}, []);
+  useEffect(() => {
+    const storedRole = localStorage.getItem('role');
+    const storedPermissions = JSON.parse(localStorage.getItem('permissions') || '{}');
+    setRole(storedRole);
+    setPermissions(storedPermissions);
+  }, []);
 
-const canView = useMemo(
-  () => role === 'admin' || permissions['View Employee Details'] === 1,
-  [role, permissions]
-);
-const canAdd = useMemo(
-  () => role === 'admin' || permissions['Add Employee Details'] === 1,
-  [role, permissions]
-);
+  const canView = useMemo(
+    () => role === 'admin' || permissions['View Employee Details'] === 1,
+    [role, permissions]
+  );
+  const canAdd = useMemo(
+    () => role === 'admin' || permissions['Add Employee Details'] === 1,
+    [role, permissions]
+  );
 
   // Fetch employees
   const [data, setData] = useState<Employee[]>([]);
@@ -79,12 +79,10 @@ const canAdd = useMemo(
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch('http://127.0.0.1:5000/employee/getlist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ search, page, pageSize: perPage }),
-      });
-      const result = await res.json();
+      const result = await post<
+        { success: boolean; data: { employees: Employee[]; totalPages: number } }
+      >('/employee/getlist', { search, page, pageSize: perPage });
+
       if (result.success) {
         setData(result.data.employees);
         setTotalPages(result.data.totalPages);
@@ -95,7 +93,7 @@ const canAdd = useMemo(
             icon: 'info',
             title: 'No employees found.',
             showConfirmButton: false,
-            timer: 1500,
+            timer: 1500
           });
         }
       }
@@ -143,6 +141,7 @@ const canAdd = useMemo(
   const handleEdit = (id: string) => {
     router.push(`/employee/addedit?employeeId=${id}`);
   };
+
   const handleDelete = async (id: string) => {
     const confirm = await Swal.fire({
       title: 'Are you sure?',
@@ -151,21 +150,21 @@ const canAdd = useMemo(
       showCancelButton: true,
       confirmButtonColor: '#d33',
       cancelButtonColor: '#3085d6',
-      confirmButtonText: 'Delete',
+      confirmButtonText: 'Delete'
     });
     if (!confirm.isConfirmed) return;
+
     try {
-      const res = await fetch('http://127.0.0.1:5000/employee/delete', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ employeeId: id }),
-      });
-      const result = await res.json();
+      const result = await post<{ success: boolean; message?: string }>(
+        '/employee/delete',
+        { employeeId: id }
+      );
+
       if (result.success) {
         Swal.fire('Deleted', 'Employee removed', 'success');
         fetchData();
       } else {
-        Swal.fire('Error', result.message, 'error');
+        Swal.fire('Error', result.message || 'Delete failed', 'error');
       }
     } catch {
       Swal.fire('Error', 'Delete failed', 'error');
@@ -197,7 +196,7 @@ const canAdd = useMemo(
           )}
         </div>
 
-        {/* Loading */}
+        {/* Loading & Permissions */}
         {loading ? (
           <div className="text-center py-4">Loading...</div>
         ) : !canView ? (

@@ -12,7 +12,7 @@ const lexend = Lexend({ subsets: ['latin'], weight: ['400', '700'] });
 
 type NavItem = 'dashboard' | 'invoice' | 'payslip' | 'employee' | 'useraccess' | 'settings';
 type SubMenuItem = 'mhdtech' | 'enoylitystudio' | 'enoylitytech';
-type SubSettingItem = 'invoice' | 'payslip';
+type SubSettingItem = 'invoice' | 'payslip' | 'update';
 
 // Invoice submenu definitions
 const invoiceSubMenus: { key: SubMenuItem; label: string }[] = [
@@ -23,7 +23,8 @@ const invoiceSubMenus: { key: SubMenuItem; label: string }[] = [
 
 const setingsSubMenus: { key: SubSettingItem; label: string }[] = [
   { key: 'invoice', label: 'Invoice' },
-  { key: 'payslip', label: 'Payslip' }
+  { key: 'payslip', label: 'Payslip' },
+  { key: 'update', label: 'Update Login' }
 ];
 
 const Sidebar: FC = () => {
@@ -139,19 +140,10 @@ const Sidebar: FC = () => {
       <aside className={`${lexend.className} hidden sm:flex flex-col fixed top-0 left-0 h-screen w-60 border-r bg-white`}>
         <div className="flex items-center p-4 cursor-pointer" onClick={() => navigateTo('/')}>
           <BsBuilding className="mr-2 text-2xl text-indigo-600" />
-          <span className="text-xl font-medium">Office Panel</span>
+          <span className="text-l font-medium">Enoylity Dashboard</span>
         </div>
 
         <nav className="flex-1 overflow-y-auto p-2 space-y-2">
-          {isVisible('dashboard') && (
-            <div
-              className={`${menuItemBase} ${selectedNav === 'dashboard' ? activeClass : ''}`}
-              onClick={() => navigateTo('/')}
-            >
-              <BsBuilding className="mr-3 text-lg" />
-              Dashboard
-            </div>
-          )}
           {isVisible('invoice') && (
             <>
               <div

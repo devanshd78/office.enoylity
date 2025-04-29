@@ -3,9 +3,9 @@
 import React, { FC, useState, useMemo, useCallback, useEffect } from 'react';
 import Link from 'next/link';
 import { FaSort, FaSortUp, FaSortDown, FaPlus, FaChevronDown, FaChevronUp } from 'react-icons/fa';
-import axios from 'axios';
+// ← import our shared helper
+import { post } from '@/app/utils/apiClient';
 
-// Types
 type Item = {
   description: string;
   quantity: number;
@@ -24,20 +24,19 @@ type Invoice = {
     city: string;
   };
   items: Item[];
-  payment_method: number; // 0 = PayPal, 1 = Bank Transfer
+  payment_method: number;
   total_amount: number;
 };
 
 type APIResponse = {
+  success: boolean;
+  message?: string;
   data: {
     invoices: any[];
     page: number;
     per_page: number;
     total: number;
   };
-  message: string;
-  status: number;
-  success: boolean;
 };
 
 const InvoiceHistoryPage: FC = () => {
@@ -66,21 +65,13 @@ const InvoiceHistoryPage: FC = () => {
 
   const fetchInvoices = useCallback(async () => {
     setLoading(true);
+    setError('');
     try {
-      const response = await axios.post<APIResponse>(
-        'http://127.0.0.1:5000/invoiceMHD/getlist',
-        {
-          search,
-          filterStatus,
-          sortField,
-          sortAsc,
-          page,
-          perPage,
-        }
-      );
+      const payload = { search, filterStatus, sortField, sortAsc, page, perPage };
+      const result = await post<APIResponse>('/invoiceMHD/getlist', payload);
 
-      if (response.data.success && Array.isArray(response.data.data.invoices)) {
-        const mapped = response.data.data.invoices.map((inv: any): Invoice => ({
+      if (result.success && Array.isArray(result.data.invoices)) {
+        const mapped = result.data.invoices.map((inv: any): Invoice => ({
           id: inv._id,
           invoice_number: inv.invoice_number,
           invoice_date: inv.invoice_date,
@@ -91,14 +82,13 @@ const InvoiceHistoryPage: FC = () => {
           total_amount: inv.total_amount,
         }));
         setInvoices(mapped);
-        setError('');
       } else {
-        setError(response.data.message || 'Unexpected response from server');
-        console.warn('Unexpected response', response.data);
+        setError(result.message || 'Unexpected response from server');
+        console.warn('Unexpected response', result);
       }
     } catch (err: any) {
       console.error('Fetch error:', err);
-      setError(err?.response?.data?.message || 'Failed to fetch invoices');
+      setError(err?.message || 'Failed to fetch invoices');
     } finally {
       setLoading(false);
     }
@@ -132,14 +122,14 @@ const InvoiceHistoryPage: FC = () => {
 
   const handlePage = useCallback((n: number) => setPage(n), []);
 
-  // Filtering, sorting, pagination
   const filtered = useMemo(() => {
     let arr = invoices;
     if (search) {
       const term = search.toLowerCase();
-      arr = arr.filter(i =>
-        i.id.toLowerCase().includes(term) ||
-        i.bill_to.name.toLowerCase().includes(term)
+      arr = arr.filter(
+        i =>
+          i.id.toLowerCase().includes(term) ||
+          i.bill_to.name.toLowerCase().includes(term)
       );
     }
     return [...arr].sort((a, b) => {
@@ -180,10 +170,8 @@ const InvoiceHistoryPage: FC = () => {
           )}
         </div>
 
-        {/* Error Message */}
+        {/* Error / Loading / Empty */}
         {error && <div className="text-red-500 text-center mb-4">{error}</div>}
-
-        {/* Loading Spinner */}
         {loading ? (
           <div className="text-center py-4">Loading...</div>
         ) : !canViewInvoices ? (
@@ -314,11 +302,31 @@ const InvoiceHistoryPage: FC = () => {
 
         {/* Pagination */}
         <div className="mt-4 flex justify-center">
-          <button onClick={() => handlePage(page - 1)} disabled={page === 1} className="px-3 py-1 border rounded-lg mx-1 disabled:opacity-50">Prev</button>
+          <button
+            onClick={() => handlePage(page - 1)}
+            disabled={page === 1}
+            className="px-3 py-1 border rounded-lg mx-1 disabled:opacity-50"
+          >
+            Prev
+          </button>
           {Array.from({ length: totalPages }, (_, i) => (
-            <button key={i} onClick={() => handlePage(i + 1)} className={`px-3 py-1 border rounded-lg mx-1 ${page === i + 1 ? 'bg-indigo-100' : ''}`}>{i + 1}</button>
+            <button
+              key={i}
+              onClick={() => handlePage(i + 1)}
+              className={`px-3 py-1 border rounded-lg mx-1 ${
+                page === i + 1 ? 'bg-indigo-100' : ''
+              }`}
+            >
+              {i + 1}
+            </button>
           ))}
-          <button onClick={() => handlePage(page + 1)} disabled={page === totalPages} className="px-3 py-1 border rounded-lg mx-1 disabled:opacity-50">Next</button>
+          <button
+            onClick={() => handlePage(page + 1)}
+            disabled={page === totalPages}
+            className="px-3 py-1 border rounded-lg mx-1 disabled:opacity-50"
+          >
+            Next
+          </button>
         </div>
       </div>
     </div>
