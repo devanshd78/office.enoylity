@@ -147,7 +147,7 @@ const InvoiceHistoryPage: FC = () => {
   return (
     <div className="min-h-screen bg-indigo-100 p-4">
       <div className="max-w-6xl mx-auto bg-white rounded-lg shadow p-6 flex flex-col">
-        <h1 className="text-2xl font-semibold mb-4">MHD Invoice History</h1>
+        <h1 className="text-2xl font-semibold mb-4">MHD Tech Invoice History</h1>
 
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 space-y-4 sm:space-y-0">

@@ -85,7 +85,7 @@ export default function InvoiceSettingsPage() {
     setLoading(true);
 
     // Build payload: include settings_id plus each editable section
-    const payload: any = { settings_id: selected.settings_id };
+    const payload: any = { invoice_type: selected.invoice_type };
     for (const [section, data] of Object.entries(selected.editable_fields)) {
       if (data) payload[section] = data;
     }

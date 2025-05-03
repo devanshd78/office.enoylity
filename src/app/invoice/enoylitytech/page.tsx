@@ -196,7 +196,7 @@ const InvoiceHistoryPage: FC = () => {
     <div className="min-h-screen bg-indigo-100 p-4">
       <div className="max-w-6xl mx-auto bg-white rounded-lg shadow p-6">
         <h1 className="text-2xl font-semibold mb-4">
-          Invoice History
+          Enoylity Media Creations Invoice History
         </h1>
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6">

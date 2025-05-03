@@ -8,6 +8,7 @@ import Swal from 'sweetalert2';
 
 // ←— import your shared post helper
 import { post } from '../utils/apiClient';
+import { Metadata } from 'next';
 
 const lexend = Lexend({ subsets: ['latin'], weight: ['400', '700'] });
 

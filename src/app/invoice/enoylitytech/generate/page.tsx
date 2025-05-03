@@ -3,317 +3,410 @@
 import React, {
   FC,
   useState,
-  useEffect,
   useCallback,
-  useMemo,
+  useMemo
 } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
-import {
-  FaSort,
-  FaSortUp,
-  FaSortDown,
-  FaPlus,
-  FaChevronDown,
-  FaChevronUp,
-} from "react-icons/fa";
-// ← import our shared helper
-import { post } from "@/app/utils/apiClient";
+import { saveAs } from "file-saver";
+import Swal from 'sweetalert2';
+import { postBlob } from "@/app/utils/apiClient";
 
-type Item = { description: string; quantity: number; price: number };
-type Invoice = {
-  id: string;
-  invoice_number: string;
-  invoice_date: string;
-  due_date: string;
-  bill_to: { name: string; email: string; address: string; city: string };
+interface Item {
+  description: string;
+  quantity: number;
+  price: number;
+}
+
+interface InvoiceData {
+  billDate: string;
+  dueDate: string;
+  clientName: string;
+  clientAddress: string;
+  clientEmail: string;
+  clientPhone: string;
+  paymentMethod: "" | "PayPal" | "Bank Transfer";
   items: Item[];
-  payment_method: number;
-  total_amount: number;
+  notes: string;
+  bankNote: string;
+}
+
+const initialItem: Item = { description: "", quantity: 1, price: 0 };
+const initialData: InvoiceData = {
+  billDate: "",
+  dueDate: "",
+  clientName: "",
+  clientAddress: "",
+  clientEmail: "",
+  clientPhone: "",
+  paymentMethod: "",
+  items: [initialItem],
+  notes: "",
+  bankNote: "",
 };
 
-const pageSize = 5;
-
-type ListResp = {
-  success: boolean;
-  message?: string;
-  data: {
-    invoices: any[];
-    total_pages: number;
-  };
-};
-
-const InvoiceRow: FC<{
-  invoice: Invoice;
-  expanded: boolean;
-  toggle: () => void;
-}> = React.memo(({ invoice, expanded, toggle }) => (
-  <>
-    <tr className="border-t hover:bg-gray-50">
-      <td className="px-3 py-2">{invoice.invoice_number}</td>
-      <td className="px-3 py-2">{invoice.invoice_date}</td>
-      <td className="px-3 py-2">{invoice.bill_to.name}</td>
-      <td className="px-3 py-2">₹ {invoice.total_amount.toFixed(2)}</td>
-      <td className="px-3 py-2">
-        {invoice.payment_method === 0 ? "PayPal" : "Bank Transfer"}
-      </td>
-      <td className="px-3 py-2">
-        <button onClick={toggle}>
-          {expanded ? <FaChevronUp /> : <FaChevronDown />}
+const ItemRow: FC<{
+  item: Item;
+  index: number;
+  onChange: (index: number, field: keyof Item, value: string | number) => void;
+  onRemove: (index: number) => void;
+  disableRemove: boolean;
+}> = React.memo(
+  ({ item, index, onChange, onRemove, disableRemove }) => (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
+      <label className="flex flex-col sm:col-span-2">
+        <span>Description</span>
+        <input
+          type="text"
+          name="description"
+          value={item.description}
+          onChange={(e) =>
+            onChange(index, "description", e.target.value)
+          }
+          required
+          className="mt-1 px-3 py-2 border rounded-lg"
+        />
+      </label>
+      {!disableRemove && (
+        <button
+          type="button"
+          onClick={() => onRemove(index)}
+          className="px-3 py-2 bg-red-500 text-white rounded-lg"
+        >
+          Remove
         </button>
-      </td>
-    </tr>
-    {expanded && (
-      <tr className="border-b bg-gray-50">
-        <td colSpan={6} className="p-2">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-200">
-                <tr>
-                  <th className="px-2 py-1 text-left">Description</th>
-                  <th className="px-2 py-1">Qty</th>
-                  <th className="px-2 py-1">Price</th>
-                </tr>
-              </thead>
-              <tbody>
-                {invoice.items.map((it, i) => (
-                  <tr key={i} className="border-t">
-                    <td className="px-2 py-1">{it.description}</td>
-                    <td className="px-2 py-1 text-center">{it.quantity}</td>
-                    <td className="px-2 py-1 text-right">
-                      ₹ {it.price.toFixed(2)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </td>
-      </tr>
-    )}
-  </>
-));
+      )}
+      <label className="flex flex-col">
+        <span>Qty</span>
+        <input
+          type="number"
+          name="quantity"
+          min={1}
+          value={item.quantity}
+          onChange={(e) =>
+            onChange(index, "quantity", Number(e.target.value))
+          }
+          className="mt-1 px-3 py-2 border rounded-lg"
+        />
+      </label>
+      <label className="flex flex-col">
+        <span>Price</span>
+        <div className="mt-1 flex rounded-lg border overflow-hidden">
+          <span className="px-3 py-2">$</span>
+          <input
+            type="number"
+            name="price"
+            min={0}
+            step={0.01}
+            value={item.price === 0 ? "" : item.price}
+            onChange={(e) =>
+              onChange(index, "price", e.target.value)
+            }
+            className="px-3 py-2 flex-1 outline-none"
+          />
+        </div>
+      </label>
+    </div>
+  )
+);
 
-const InvoiceHistoryPage: FC = () => {
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [search, setSearch] = useState("");
-  const [sortField, setSortField] = useState<keyof Invoice>(
-    "invoice_date"
+const GenerateInvoicePage: FC = () => {
+  const router = useRouter();
+  const [data, setData] = useState<InvoiceData>(initialData);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleFieldChange = useCallback(
+    (
+      e: React.ChangeEvent<
+        HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+      >
+    ) => {
+      const { name, value } = e.target;
+      setData((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+    },
+    []
   );
-  const [sortAsc, setSortAsc] = useState(false);
-  const [page, setPage] = useState(1);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  // Load role & permissions once
-  const [role, setRole] = useState<string | null>(null);
-  const [permissions, setPermissions] = useState<Record<string, any>>({});
-  useEffect(() => {
-    setRole(localStorage.getItem("role"));
-    setPermissions(
-      JSON.parse(localStorage.getItem("permissions") || "{}")
-    );
-  }, []);
+  const handleItemChange = useCallback(
+    (index: number, field: keyof Item, value: string | number) => {
+      setData((prev) => ({
+        ...prev,
+        items: prev.items.map((it, i) =>
+          i === index
+            ? {
+                ...it,
+                [field]:
+                  field === "description" ? value : Number(value),
+              }
+            : it
+        ),
+      }));
+    },
+    []
+  );
 
-  const canView = useMemo(
+  const addItem = useCallback(
     () =>
-      role === "admin" ||
-      permissions["View Invoice details"] === 1,
-    [role, permissions]
+      setData((prev) => ({
+        ...prev,
+        items: [...prev.items, initialItem],
+      })),
+    []
   );
-  const canGenerate = useMemo(
+  const removeItem = useCallback(
+    (index: number) =>
+      setData((prev) => ({
+        ...prev,
+        items: prev.items.filter((_, i) => i !== index),
+      })),
+    []
+  );
+
+  const formattedInvoiceDate = useMemo(() => {
+    if (!data.billDate) return "";
+    const d = new Date(data.billDate);
+    return [
+      d.getDate().toString().padStart(2, "0"),
+      (d.getMonth() + 1).toString().padStart(2, "0"),
+      d.getFullYear(),
+    ].join("-");
+  }, [data.billDate]);
+
+  const formattedDueDate = useMemo(() => {
+    if (!data.dueDate) return "";
+    const d = new Date(data.dueDate);
+    return [
+      d.getDate().toString().padStart(2, "0"),
+      (d.getMonth() + 1).toString().padStart(2, "0"),
+      d.getFullYear(),
+    ].join("-");
+  }, [data.dueDate]);
+
+  const isValid = useMemo(
     () =>
-      role === "admin" ||
-      permissions["Generate invoice details"] === 1,
-    [role, permissions]
+      !!data.billDate &&
+      !!data.dueDate &&
+      !!data.clientName &&
+      !!data.clientAddress &&
+      data.items.length > 0,
+    [data]
   );
 
-  // Fetch invoices using shared post helper
-  const fetchInvoices = useCallback(async () => {
-    if (!canView) return;
-    setLoading(true);
-    setError("");
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
 
+    if (!isValid) {
+      await Swal.fire({
+        icon: "warning",
+        title: "Missing Information",
+        text: "Please fill all required fields.",
+      });
+      return;               // ← early exit
+    }
+
+    const payload = {
+      bill_to_name: data.clientName,
+      bill_to_address: data.clientAddress,
+      bill_to_phone: data.clientPhone,
+      bill_to_email: data.clientEmail,
+      invoice_date: formattedInvoiceDate,
+      due_date: formattedDueDate,
+      note: data.notes,
+      items: data.items,
+      payment_method:
+        data.paymentMethod === "PayPal"
+          ? 0
+          : data.paymentMethod === "Bank Transfer"
+          ? 1
+          : 2,
+      bank_Note:
+        data.paymentMethod === "Bank Transfer" ? data.bankNote : "",
+    };
+
+    setIsLoading(true);
     try {
-      const params: any = {
-        page,
-        page_size: pageSize,
-        sort_by: sortField,
-        sort_order: sortAsc ? "asc" : "desc",
-      };
-      if (search) params.search = search;
-
-      const result = await post<ListResp>(
-        "/invoiceEnoylityLLC/getlist",
-        params
+      const blob = await postBlob(
+        "/invoiceEnoylityLLC/generate-invoice",
+        payload
       );
+      saveAs(blob, `invoice_${formattedInvoiceDate}.pdf`);
 
-      if (!result.success) {
-        setError(result.message || "Failed to load invoices.");
-      } else {
-        const raw = result.data.invoices;
-        const mapped: Invoice[] = raw.map((inv: any) => ({
-          id: inv.invoiceenoylityId,
-          invoice_number: inv.invoice_number,
-          invoice_date: inv.invoice_date,
-          due_date: inv.due_date,
-          bill_to: inv.bill_to,
-          items: inv.items,
-          payment_method: inv.payment_method,
-          total_amount: inv.total,
-        }));
-        setInvoices(mapped);
-      }
-    } catch (e: any) {
-      setError(e.message || "Network or server error.");
+      await Swal.fire({
+        icon: "success",
+        title: "Invoice Generated",
+        text: "Your PDF has been downloaded.",
+        timer: 1500,
+        showConfirmButton: false,
+      });
+
+      router.push("/invoice/enoylitytech");
+    } catch (err) {
+      console.error(err);
+      Swal.fire({
+        icon: "error",
+        title: "Generation Failed",
+        text: "There was an error generating your invoice. Please try again.",
+      });
     } finally {
-      setLoading(false);
+      setIsLoading(false);
     }
-  }, [canView, page, search, sortField, sortAsc]);
-
-  useEffect(() => {
-    fetchInvoices();
-  }, [fetchInvoices]);
-
-  const totalPages = useMemo(
-    () => Math.ceil(invoices.length / pageSize),
-    [invoices]
-  );
-
-  const toggleExpand = (id: string) =>
-    setExpandedId((prev) => (prev === id ? null : id));
-
-  const onSort = (field: keyof Invoice) => {
-    if (field === sortField) setSortAsc((p) => !p);
-    else {
-      setSortField(field);
-      setSortAsc(true);
-    }
-    setPage(1);
   };
 
   return (
     <div className="min-h-screen bg-indigo-100 p-4">
-      <div className="max-w-6xl mx-auto bg-white rounded-lg shadow p-6">
+      <div className="max-w-3xl mx-auto bg-white rounded-lg shadow p-6 mb-12">
         <h1 className="text-2xl font-semibold mb-4">
-          Invoice History
+          Generate Invoice for Enoylity Media Creations
         </h1>
+        <form
+          onSubmit={handleSubmit}
+          onKeyDown={(e) => e.key === "Enter" && e.preventDefault()}
+          className="space-y-4"
+        >
+          {/* Dates */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {(["billDate", "dueDate"] as const).map((field) => (
+              <label key={field} className="flex flex-col">
+                <span>
+                  {field === "billDate" ? "Bill Date" : "Due Date"}
+                </span>
+                <input
+                  type="date"
+                  name={field}
+                  value={data[field]}
+                  onChange={handleFieldChange}
+                  required
+                  className="mt-1 px-3 py-2 border rounded-lg"
+                />
+              </label>
+            ))}
+          </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6">
-          <input
-            placeholder="Search..."
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(1);
-            }}
-            className="px-3 py-2 border rounded-lg w-full sm:w-64"
-          />
-          {canGenerate && (
-            <Link
-              href="/invoice/enoylitytech/generate"
-              className="flex items-center px-5 py-2 bg-indigo-600 text-white rounded-lg"
+          {/* Client Info */}
+          <div className="space-y-2">
+            <h2 className="font-bold">Client Information</h2>
+            {(
+              ["clientName", "clientAddress", "clientEmail", "clientPhone"] as const
+            ).map((field) => (
+              <label key={field} className="flex flex-col">
+                <span>
+                  {{
+                    clientName: "Name",
+                    clientAddress: "Address",
+                    clientEmail: "Email",
+                    clientPhone: "Phone",
+                  }[field]}
+                </span>
+                <input
+                  type={
+                    field === "clientEmail"
+                      ? "email"
+                      : field === "clientPhone"
+                        ? "tel"
+                        : "text"
+                  }
+                  name={field}
+                  value={data[field]}
+                  onChange={handleFieldChange}
+                  className="mt-1 px-3 py-2 border rounded-lg"
+                />
+              </label>
+            ))}
+          </div>
+
+          {/* Payment Method */}
+          <div className="space-y-2">
+            <label className="flex flex-col">
+              <span>Payment Method</span>
+              <select
+                name="paymentMethod"
+                value={data.paymentMethod}
+                onChange={handleFieldChange}
+                className="mt-1 px-3 py-2 border rounded-lg"
+              >
+                <option value="" disabled>
+                  Select Payment Method
+                </option>
+                <option value="PayPal">PayPal</option>
+                <option value="Bank Transfer">Bank Transfer</option>
+              </select>
+            </label>
+
+            {data.paymentMethod === "Bank Transfer" && (
+              <label className="flex flex-col">
+                <span>Bank Note</span>
+                <input
+                  type="text"
+                  name="bankNote"
+                  value={data.bankNote}
+                  onChange={handleFieldChange}
+                  className="mt-1 px-3 py-2 border rounded-lg"
+                />
+              </label>
+            )}
+          </div>
+
+          {/* Items */}
+          <div className="space-y-2">
+            <h2 className="font-medium">Items</h2>
+            {data.items.map((it, idx) => (
+              <ItemRow
+                key={idx}
+                item={it}
+                index={idx}
+                onChange={handleItemChange}
+                onRemove={removeItem}
+                disableRemove={data.items.length <= 1}
+              />
+            ))}
+            <button
+              type="button"
+              onClick={addItem}
+              className="mt-2 px-4 py-2 bg-indigo-600 text-white rounded-lg"
             >
-              <FaPlus className="mr-2" /> Generate
+              Add Item
+            </button>
+          </div>
+
+          {/* Notes */}
+          <label className="flex flex-col">
+            <span>Notes</span>
+            <textarea
+              name="notes"
+              value={data.notes}
+              onChange={handleFieldChange}
+              className="mt-1 px-3 py-2 border rounded-lg"
+              rows={3}
+            />
+          </label>
+
+          {/* Actions */}
+          <div className="flex justify-end space-x-4">
+            <Link
+              href="/invoice/enoylitytech"
+              className="px-4 py-2 border rounded-lg"
+            >
+              Cancel
             </Link>
-          )}
-        </div>
-
-        {error && (
-          <div className="text-red-500 text-center mb-4">{error}</div>
-        )}
-        {loading ? (
-          <div className="text-center py-4">Loading...</div>
-        ) : !canView ? (
-          <div className="text-center py-4 text-gray-600">
-            You do not have permission to view invoices.
+            <button
+              type="submit"
+              disabled={!isValid || isLoading}
+              className={`px-4 py-2 rounded-lg text-white ${
+                isValid && !isLoading
+                  ? "bg-indigo-600 hover:bg-indigo-700"
+                  : "bg-gray-400 cursor-not-allowed"
+              }`}
+            >
+              {isLoading ? "Generating…" : "Generate"}
+            </button>
           </div>
-        ) : invoices.length === 0 ? (
-          <div className="text-center py-4 text-gray-600">
-            No invoices found.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full bg-white border">
-              <thead className="bg-gray-100">
-                <tr>
-                  {[
-                    { key: "invoice_number", label: "#" },
-                    { key: "invoice_date", label: "Date" },
-                    { key: "bill_to.name", label: "Client" },
-                    { key: "total_amount", label: "Total" },
-                    { key: "payment_method", label: "Payment" },
-                  ].map(({ key, label }) => (
-                    <th
-                      key={key}
-                      className="px-3 py-2 text-left cursor-pointer"
-                      onClick={() =>
-                        onSort(key as keyof Invoice)
-                      }
-                    >
-                      <div className="flex items-center">
-                        {label}{" "}
-                        {sortField === key ? (
-                          sortAsc ? (
-                            <FaSortUp />
-                          ) : (
-                            <FaSortDown />
-                          )
-                        ) : (
-                          <FaSort className="text-gray-400" />
-                        )}
-                      </div>
-                    </th>
-                  ))}
-                  <th className="px-3 py-2">Details</th>
-                </tr>
-              </thead>
-              <tbody>
-                {invoices.map((inv) => (
-                  <InvoiceRow
-                    key={inv.id}
-                    invoice={inv}
-                    expanded={expandedId === inv.id}
-                    toggle={() => toggleExpand(inv.id)}
-                  />
-                ))}
-              </tbody>
-            </table>
-
-            <div className="mt-4 flex justify-center space-x-2">
-              <button
-                onClick={() => setPage((p) => Math.max(p - 1, 1))}
-                disabled={page === 1}
-                className="px-3 py-1 border rounded"
-              >
-                Prev
-              </button>
-              {Array.from({ length: totalPages }).map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => setPage(i + 1)}
-                  className={`px-3 py-1 border rounded ${
-                    page === i + 1 ? "bg-indigo-200" : ""
-                  }`}
-                >
-                  {i + 1}
-                </button>
-              ))}
-              <button
-                onClick={() =>
-                  setPage((p) => Math.min(p + 1, totalPages))
-                }
-                disabled={page === totalPages}
-                className="px-3 py-1 border rounded"
-              >
-                Next
-              </button>
-            </div>
-          </div>
-        )}
+        </form>
       </div>
     </div>
   );
 };
 
-export default InvoiceHistoryPage;
+export default GenerateInvoicePage;

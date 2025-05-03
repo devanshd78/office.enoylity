@@ -3,6 +3,21 @@
 import React, { FC, useEffect, useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 
+interface Option {
+  title: string;
+  route: string;
+  icon: string;
+  permissionKey?: string; // optional property
+}
+
+interface Group {
+  title: string;
+  permissionKeys: string[];
+  options: Option[];
+  color: keyof typeof colorClasses;
+}
+
+
 const colorClasses: Record<string, { headerText: string; headerBorder: string; iconBg: string; iconText: string }> = {
   indigo: {
     headerText: 'text-indigo-600',
@@ -30,7 +45,7 @@ const colorClasses: Record<string, { headerText: string; headerBorder: string; i
   },
 };
 
-const groups = [
+const groups: Group[] = [
   {
     title: 'Invoice',
     permissionKeys: ['Generate invoice details', 'View Invoice details'],
@@ -44,7 +59,7 @@ const groups = [
   {
     title: 'Payslip',
     permissionKeys: ['Generate payslip', 'View payslip details'],
-    options: [{ title: 'Enoylity Studio', route: '/payslip/enoylity', icon: '📄' }],
+    options: [{ title: 'Enoylity Studio', route: '/payslip', icon: '📄' }],
     color: 'emerald',
   },
   {
@@ -58,17 +73,23 @@ const groups = [
   },
   {
     title: 'User Access',
-    permissionKeys: [], // Only for admin
+    permissionKeys: [],
     options: [{ title: 'Manage', route: '/useraccess', icon: '🛡️' }],
     color: 'amber',
   },
   {
     title: 'Settings',
-    permissionKeys: [], // Only for admin
-    options: [{ title: 'Manage Settings', route: '/settings', icon: '⚙️' }],
+    permissionKeys: [],
+    options: [
+      { title: 'Update Invoice', route: '/settings/invoice', icon: '🧾' },
+      { title: 'Update Payslip', route: '/settings/payslip', icon: '📄' },
+      { title: 'Update Login', route: '/settings/update', icon: '🔐' },
+    ],
     color: 'amber',
-  },
+  }
+  
 ];
+
 
 const Dashboard: FC = () => {
   const router = useRouter();

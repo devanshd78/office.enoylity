@@ -47,12 +47,16 @@ const PayslipHistory: FC = () => {
   const rowsPerPage = 5;
   const router = useRouter();
 
-  const role =
-    typeof window !== "undefined" ? localStorage.getItem("role") : null;
-  const permissions =
-    typeof window !== "undefined"
-      ? JSON.parse(localStorage.getItem("permissions") || "{}")
-      : {};
+  const [role, setRole] = useState<string | null>(null);
+  const [permissions, setPermissions] = useState<Record<string, number>>({});
+  
+  useEffect(() => {
+    const storedRole = localStorage.getItem("role");
+    const storedPermissions = localStorage.getItem("permissions");
+  
+    setRole(storedRole);
+    setPermissions(storedPermissions ? JSON.parse(storedPermissions) : {});
+  }, []);
 
   const canViewPayslips =
     role === "admin" || permissions["View payslip details"] === 1;
@@ -102,12 +106,12 @@ const PayslipHistory: FC = () => {
 
   const handleViewPdf = (entry: PayslipEntry) => {
     window.open(
-      `http://127.0.0.1:5000/employee/viewpdf/${entry.payslipId}`,
+      `${process.env.NEXT_PUBLIC_API_BASE_URL}/employee/viewpdf/${entry.payslipId}`,
       "_blank",
       "noopener,noreferrer"
     );
   };
-
+  
   const paginatedData = data; // already server-paged
   const totalPages = Math.max(1, Math.ceil(totalRecords / rowsPerPage));
 
