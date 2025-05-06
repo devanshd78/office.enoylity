@@ -74,9 +74,8 @@ const GenerateInvoicePage: FC = () => {
     dueDate &&
     clientName &&
     clientAddress &&
-    paymentMethod &&
     items.length > 0,
-    [billDate, dueDate, clientName, clientAddress, paymentMethod, items]
+    [billDate, dueDate, clientName, clientAddress, items]
   );
 
   const handleSubmit = async (e: React.FormEvent) => {

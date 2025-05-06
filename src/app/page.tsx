@@ -114,7 +114,7 @@ const Dashboard: FC = () => {
   const hasPermission = (key: string) => permissions[key] === 1;
 
   return (
-    <div className="bg-indigo-50 min-h-screen py-10 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen py-1 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
         <h1 className="text-4xl font-bold text-gray-800 mb-8">Dashboard</h1>
 

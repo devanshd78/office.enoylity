@@ -5,7 +5,8 @@ import { useRouter, usePathname } from 'next/navigation';
 import { Lexend } from 'next/font/google';
 import { BsBuilding } from 'react-icons/bs';
 import { FaFileInvoiceDollar, FaMoneyCheckAlt, FaUsers } from 'react-icons/fa';
-import { FiChevronUp, FiChevronDown, FiLogOut, FiMoreHorizontal, FiSettings } from 'react-icons/fi';
+import { FiChevronUp, FiChevronDown, FiLogOut, FiMoreHorizontal, FiSettings, FiMenu } from 'react-icons/fi';
+import Header from './topbar';
 
 // Load Lexend font if needed
 const lexend = Lexend({ subsets: ['latin'], weight: ['400', '700'] });
@@ -41,6 +42,7 @@ const Sidebar: FC = () => {
   // Mobile submenu & logout
   const [mobileSubMenu, setMobileSubMenu] = useState<NavItem | null>(null);
   const [showLogoutMobile, setShowLogoutMobile] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   const getHiddenPanels = (): NavItem[] => {
     const role = localStorage.getItem('role');
@@ -120,10 +122,10 @@ const Sidebar: FC = () => {
   const toggleSettings = () => setOpenSettings(prev => !prev);
 
   const handleMobileNav = (item: NavItem) => {
-    setShowLogoutMobile(false);
     if (item === 'invoice' || item === 'settings') {
       setMobileSubMenu(prev => (prev === item ? null : item));
     } else {
+      setMobileSidebarOpen(false);
       navigateTo(item === 'dashboard' ? '/' : `/${item}`);
     }
   };
@@ -137,11 +139,14 @@ const Sidebar: FC = () => {
   return (
     <>
       {/* Desktop sidebar */}
+      <Header onMenuClick={() => setMobileSidebarOpen(prev => !prev)} />
+
       <aside className={`${lexend.className} hidden sm:flex flex-col fixed top-0 left-0 h-screen w-60 border-r bg-white`}>
         <div className="flex items-center p-4 cursor-pointer" onClick={() => navigateTo('/')}>
           <BsBuilding className="mr-2 text-2xl text-indigo-600" />
           <span className="text-l font-medium">Enoylity Dashboard</span>
         </div>
+
 
         <nav className="flex-1 overflow-y-auto p-2 space-y-2">
           {isVisible('invoice') && (
@@ -243,91 +248,63 @@ const Sidebar: FC = () => {
         </div>
       </aside>
 
-      {/* Mobile bottom nav */}
-      <nav className="fixed bottom-3 left-1/2 transform -translate-x-1/2 w-11/12 bg-white rounded-2xl shadow-lg p-3 flex justify-evenly sm:hidden overflow-x-auto">
-        {/* Add a wrapper to allow scrolling if too many options */}
-        <div className="flex space-x-3">
-          {(['dashboard', 'invoice', 'payslip', 'employee', 'useraccess', 'settings'] as NavItem[])
-            .filter(isVisible)
-            .map(item => {
-              const icons: Record<NavItem, JSX.Element> = {
-                dashboard: <BsBuilding className="text-2xl" />,
-                invoice: <FaFileInvoiceDollar className="text-2xl" />,
-                payslip: <FaMoneyCheckAlt className="text-2xl" />,
-                employee: <FaUsers className="text-2xl" />,
-                useraccess: <FaUsers className="text-2xl rotate-180" />,
-                settings: <FiSettings className="text-2xl" />,
-              };
-              return (
-                <button
-                  key={item}
-                  type="button"
-                  onClick={() => handleMobileNav(item)}
-                  className={`flex flex-col items-center text-sm ${selectedNav === item
-                    ? 'text-indigo-600 font-semibold border-t-2 border-indigo-600 pt-1'
-                    : 'text-gray-500'
-                    }`}
-                >
-                  {icons[item]}
-                  <span className="mt-1 capitalize">{item}</span>
-                </button>
-              );
-            })}
+      {/* Mobile Sidebar Drawer */}
+      {mobileSidebarOpen && (
+        <div className="fixed inset-0 z-40 sm:hidden">
+          {/* Overlay */}
+          <div className="absolute inset-0 bg-black opacity-30" onClick={() => setMobileSidebarOpen(false)} />
 
-          {/* More button if needed */}
-          <button
-            type="button"
-            onClick={() => setShowLogoutMobile(prev => !prev)}
-            className="flex flex-col items-center text-sm text-gray-500"
-          >
-            <FiMoreHorizontal className="text-2xl" />
-          </button>
-        </div>
-      </nav>
+          {/* Sidebar */}
+          <div className="absolute left-0 top-0 h-full w-64 bg-white shadow-lg p-4 space-y-4 overflow-y-auto">
+            <div className="flex items-center justify-between mb-6">
+              <span className="text-lg font-semibold">Menu</span>
+              <button onClick={() => setMobileSidebarOpen(false)}>✕</button>
+            </div>
 
-      {/* Mobile invoice submenu */}
-      {mobileSubMenu === 'invoice' && isVisible('invoice') && (
-        <div className="fixed bottom-20 left-1/2 transform -translate-x-1/2 bg-white p-4 rounded-lg shadow-lg max-h-40 overflow-y-auto sm:hidden">
-          {invoiceSubMenus.map(({ key, label }) => (
+            {(['dashboard', 'invoice', 'payslip', 'employee', 'useraccess', 'settings'] as NavItem[])
+              .filter(isVisible)
+              .map((item) => (
+                <div key={item}>
+                  <button
+                    onClick={() => handleMobileNav(item)}
+                    className="w-full flex items-center px-3 py-2 rounded-lg text-left hover:bg-indigo-100"
+                  >
+                    {item === 'dashboard' && <BsBuilding className="mr-3 text-lg" />}
+                    {item === 'invoice' && <FaFileInvoiceDollar className="mr-3 text-lg" />}
+                    {item === 'payslip' && <FaMoneyCheckAlt className="mr-3 text-lg" />}
+                    {item === 'employee' && <FaUsers className="mr-3 text-lg" />}
+                    {item === 'useraccess' && <FaUsers className="mr-3 text-lg rotate-180" />}
+                    {item === 'settings' && <FiSettings className="mr-3 text-lg" />}
+                    <span className="capitalize">{item}</span>
+                  </button>
+
+                  {/* Nested submenu for invoice/settings */}
+                  {mobileSubMenu === item && (
+                    <div className="ml-6 mt-2 space-y-2">
+                      {(item === 'invoice' ? invoiceSubMenus : setingsSubMenus).map(({ key, label }) => (
+                        <button
+                          key={key}
+                          onClick={() => {
+                            setMobileSidebarOpen(false);
+                            navigateTo(`/${item}/${key}`);
+                          }}                          
+                          className="w-full flex items-center px-3 py-2 rounded-lg text-left hover:bg-indigo-200"
+                        >
+                          <span className="text-sm">{label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+
             <button
-              key={key}
-              type="button"
-              onClick={() => navigateTo(`/invoice/${key}`)}
-              className="flex items-center w-full px-3 py-2 rounded-lg hover:bg-indigo-600 hover:text-white transition"
+              onClick={handleLogout}
+              className="w-full mt-6 text-left px-3 py-2 rounded-lg hover:bg-red-600 hover:text-white transition"
             >
-              <FaFileInvoiceDollar className="mr-3 text-lg" />
-              {label}
+              <FiLogOut className="mr-2 inline" /> Log Out
             </button>
-          ))}
-        </div>
-      )}
-
-      {mobileSubMenu === 'settings' && isVisible('settings') && (
-        <div className="fixed bottom-20 left-1/2 transform -translate-x-1/2 bg-white p-4 rounded-lg shadow-lg max-h-40 overflow-y-auto sm:hidden">
-          {setingsSubMenus.map(({ key, label }) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => navigateTo(`/settings/${key}`)}
-              className="flex items-center w-full px-3 py-2 rounded-lg hover:bg-indigo-600 hover:text-white transition"
-            >
-              <FiSettings className="mr-3 text-lg" />
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
-
-
-      {/* Mobile logout dropdown */}
-      {showLogoutMobile && (
-        <div className="fixed bottom-20 right-5 bg-white p-4 rounded-lg shadow-lg sm:hidden">
-          <button
-            onClick={handleLogout}
-            className="w-full text-left px-3 py-2 rounded-lg hover:bg-red-600 hover:text-white transition"
-          >
-            Log Out
-          </button>
+          </div>
         </div>
       )}
     </>

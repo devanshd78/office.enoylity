@@ -1,21 +1,24 @@
-// src/app/Components/ClientWrapper.tsx
 'use client';
 
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
-import Sidebar from "./sidebar";
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect } from 'react';
+import Sidebar from './sidebar';
 
-export default function ClientWrapper({ children }: { children: React.ReactNode }) {
+interface ClientWrapperProps {
+  children: React.ReactNode;
+}
+
+export default function ClientWrapper({ children }: ClientWrapperProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const isLoginPage = pathname === "/login";
+  const isLoginPage = pathname === '/login';
 
   useEffect(() => {
-    const role = localStorage.getItem("role");
-    if (!role && pathname !== "/login") {
-      router.replace("/login");
+    const role = localStorage.getItem('role');
+    if (!role && !isLoginPage) {
+      router.replace('/login');
     }
-  }, [pathname, router]);
+  }, [isLoginPage, router]);
 
   if (isLoginPage) {
     return <main className="min-h-screen bg-indigo-100">{children}</main>;
@@ -24,7 +27,7 @@ export default function ClientWrapper({ children }: { children: React.ReactNode 
   return (
     <div className="flex">
       <Sidebar />
-      <main className="flex-1 md:ml-60 lg:ml-60 bg-indigo-100 min-h-screen">
+      <main className="flex-1 min-h-screen bg-indigo-100 pt-16 md:pt-10 px-4 md:ml-60 lg:ml-60">
         {children}
       </main>
     </div>
