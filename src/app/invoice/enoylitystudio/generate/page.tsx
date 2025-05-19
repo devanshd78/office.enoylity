@@ -1,11 +1,11 @@
 "use client";
 
-import React, { FC, useState, useCallback, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import React, { FC, useState, useCallback, useMemo, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { saveAs } from "file-saver";
 import Swal from "sweetalert2";
-import { postBlob } from "@/app/utils/apiClient";
+import { post, postBlob } from "@/app/utils/apiClient";
 
 interface Item {
   description: string;
@@ -15,6 +15,9 @@ interface Item {
 
 const GenerateInvoicePage: FC = () => {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const invoiceId = searchParams.get("id");
+
   const [billDate, setBillDate] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [clientName, setClientName] = useState("");
@@ -28,6 +31,41 @@ const GenerateInvoicePage: FC = () => {
   const [items, setItems] = useState<Item[]>([{ description: "", quantity: 1, price: 0 }]);
   const [notes, setNotes] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  const convertToInputDate = (dateStr: string) => {
+    const [day, month, year] = dateStr.split("-");
+    return `${year}-${month}-${day}`;
+  };
+
+  useEffect(() => {
+    if (invoiceId) {
+      const fetchInvoiceData = async () => {
+        try {
+          const response = await post(`/invoiceEnoylity/getinvoice`, { id: invoiceId });
+
+          // If response is from Axios, data is in response.data
+          const data = response.data;
+
+          setBillDate(convertToInputDate(data.invoice_date));
+          setDueDate(convertToInputDate(data.due_date));
+          setClientName(data.client_name);
+          setClientAddress(data.client_address);
+          setClientCity(data.client_city);
+          setClientEmail(data.client_email);
+          setClientPhone(data.phone);
+          setPaymentMethod(data.payment_method === 0 ? "PayPal" : "Bank Transfer");
+          setBankName(data.bank_name);
+          setBankAccount(data.bank_account);
+          setItems(data.items);
+          setNotes(data.notes);
+        } catch (error) {
+          console.error("Error fetching invoice data:", error);
+        }
+      };
+
+      fetchInvoiceData();
+    }
+  }, [invoiceId]); // ← Fix: add dependency array
 
   const handleAddItem = useCallback(() => {
     setItems((prev) => [...prev, { description: "", quantity: 1, price: 0 }]);
@@ -43,9 +81,9 @@ const GenerateInvoicePage: FC = () => {
         prev.map((it, i) =>
           i === index
             ? {
-                ...it,
-                [field]: field === "description" ? value : Number(value),
-              }
+              ...it,
+              [field]: field === "description" ? value : Number(value),
+            }
             : it
         )
       );
@@ -116,7 +154,7 @@ const GenerateInvoicePage: FC = () => {
     setIsLoading(true);
     try {
       const blob = await postBlob("/invoiceEnoylity/generate-invoice", payload);
-      saveAs(blob, `invoice_${formattedInvoiceDate}.pdf`);
+      saveAs(blob, `invoice_${payload.client_name}.pdf`);
 
       await Swal.fire({
         icon: "success",
@@ -302,11 +340,10 @@ const GenerateInvoicePage: FC = () => {
             <button
               type="submit"
               disabled={!isValid || isLoading}
-              className={`px-4 py-2 rounded-lg text-white ${
-                isValid && !isLoading
-                  ? "bg-indigo-600 hover:bg-indigo-700"
-                  : "bg-gray-400 cursor-not-allowed"
-              }`}
+              className={`px-4 py-2 rounded-lg text-white ${isValid && !isLoading
+                ? "bg-indigo-600 hover:bg-indigo-700"
+                : "bg-gray-400 cursor-not-allowed"
+                }`}
             >
               {isLoading ? "Generating…" : "Generate"}
             </button>

@@ -1,13 +1,8 @@
 "use client";
 
-import React, {
-  FC,
-  useState,
-  useEffect,
-  useCallback,
-  useMemo,
-} from "react";
+import React, { FC, useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   FaSort,
   FaSortUp,
@@ -15,8 +10,8 @@ import {
   FaPlus,
   FaChevronDown,
   FaChevronUp,
+  FaEdit,
 } from "react-icons/fa";
-// ← import our shared helper
 import { post } from "@/app/utils/apiClient";
 
 type Item = { description: string; quantity: number; price: number };
@@ -46,7 +41,8 @@ const InvoiceRow: FC<{
   invoice: Invoice;
   expanded: boolean;
   toggle: () => void;
-}> = React.memo(({ invoice, expanded, toggle }) => (
+  onCopy: () => void;
+}> = React.memo(({ invoice, expanded, toggle, onCopy }) => (
   <>
     <tr className="border-t hover:bg-gray-50">
       <td className="px-3 py-2">{invoice.invoice_number}</td>
@@ -56,9 +52,16 @@ const InvoiceRow: FC<{
       <td className="px-3 py-2">
         {invoice.payment_method === 0 ? "PayPal" : "Bank Transfer"}
       </td>
-      <td className="px-3 py-2">
+      <td className="px-3 py-2 flex items-center space-x-2">
         <button onClick={toggle}>
           {expanded ? <FaChevronUp /> : <FaChevronDown />}
+        </button>
+        <button
+          onClick={onCopy}
+          className="px-3 py-1 text-green-600 rounded"
+          title="Copy & Generate"
+        >
+          <FaEdit />
         </button>
       </td>
     </tr>
@@ -94,41 +97,36 @@ const InvoiceRow: FC<{
 ));
 
 const InvoiceHistoryPage: FC = () => {
+  const router = useRouter();
+
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
-  const [sortField, setSortField] = useState<keyof Invoice>(
-    "invoice_date"
-  );
+  const [sortField, setSortField] = useState<keyof Invoice>("invoice_date");
   const [sortAsc, setSortAsc] = useState(false);
   const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  // Load role & permissions once
   const [role, setRole] = useState<string | null>(null);
   const [permissions, setPermissions] = useState<Record<string, any>>({});
+
   useEffect(() => {
     setRole(localStorage.getItem("role"));
-    setPermissions(
-      JSON.parse(localStorage.getItem("permissions") || "{}")
-    );
+    setPermissions(JSON.parse(localStorage.getItem("permissions") || "{}"));
   }, []);
 
   const canView = useMemo(
-    () =>
-      role === "admin" ||
-      permissions["View Invoice details"] === 1,
-    [role, permissions]
-  );
-  const canGenerate = useMemo(
-    () =>
-      role === "admin" ||
-      permissions["Generate invoice details"] === 1,
+    () => role === "admin" || permissions["View Invoice details"] === 1,
     [role, permissions]
   );
 
-  // Fetch invoices using shared post helper
+  const canGenerate = useMemo(
+    () => role === "admin" || permissions["Generate invoice details"] === 1,
+    [role, permissions]
+  );
+
   const fetchInvoices = useCallback(async () => {
     if (!canView) return;
     setLoading(true);
@@ -143,10 +141,7 @@ const InvoiceHistoryPage: FC = () => {
       };
       if (search) params.search = search;
 
-      const result = await post<ListResp>(
-        "/invoiceEnoylityLLC/getlist",
-        params
-      );
+      const result = await post<ListResp>("/invoiceEnoylityLLC/getlist", params);
 
       if (!result.success) {
         setError(result.message || "Failed to load invoices.");
@@ -163,6 +158,7 @@ const InvoiceHistoryPage: FC = () => {
           total_amount: inv.total,
         }));
         setInvoices(mapped);
+        setTotalPages(result.data.total_pages || 1);
       }
     } catch (e: any) {
       setError(e.message || "Network or server error.");
@@ -174,11 +170,6 @@ const InvoiceHistoryPage: FC = () => {
   useEffect(() => {
     fetchInvoices();
   }, [fetchInvoices]);
-
-  const totalPages = useMemo(
-    () => Math.ceil(invoices.length / pageSize),
-    [invoices]
-  );
 
   const toggleExpand = (id: string) =>
     setExpandedId((prev) => (prev === id ? null : id));
@@ -212,16 +203,14 @@ const InvoiceHistoryPage: FC = () => {
           {canGenerate && (
             <Link
               href="/invoice/enoylitytech/generate"
-              className="flex items-center px-5 py-2 bg-indigo-600 text-white rounded-lg"
+              className="flex items-center px-5 py-2 bg-indigo-600 text-white rounded-lg mt-2 sm:mt-0"
             >
               <FaPlus className="mr-2" /> Generate
             </Link>
           )}
         </div>
 
-        {error && (
-          <div className="text-red-500 text-center mb-4">{error}</div>
-        )}
+        {error && <div className="text-red-500 text-center mb-4">{error}</div>}
         {loading ? (
           <div className="text-center py-4">Loading...</div>
         ) : !canView ? (
@@ -229,9 +218,7 @@ const InvoiceHistoryPage: FC = () => {
             You do not have permission to view invoices.
           </div>
         ) : invoices.length === 0 ? (
-          <div className="text-center py-4 text-gray-600">
-            No invoices found.
-          </div>
+          <div className="text-center py-4 text-gray-600">No invoices found.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full bg-white border">
@@ -247,9 +234,7 @@ const InvoiceHistoryPage: FC = () => {
                     <th
                       key={key}
                       className="px-3 py-2 text-left cursor-pointer"
-                      onClick={() =>
-                        onSort(key as keyof Invoice)
-                      }
+                      onClick={() => onSort(key as keyof Invoice)}
                     >
                       <div className="flex items-center">
                         {label}{" "}
@@ -275,6 +260,11 @@ const InvoiceHistoryPage: FC = () => {
                     invoice={inv}
                     expanded={expandedId === inv.id}
                     toggle={() => toggleExpand(inv.id)}
+                    onCopy={() =>
+                      router.push(
+                        `/invoice/enoylitytech/generate?id=${encodeURIComponent(inv.id)}`
+                      )
+                    }
                   />
                 ))}
               </tbody>
@@ -292,17 +282,14 @@ const InvoiceHistoryPage: FC = () => {
                 <button
                   key={i}
                   onClick={() => setPage(i + 1)}
-                  className={`px-3 py-1 border rounded ${
-                    page === i + 1 ? "bg-indigo-200" : ""
-                  }`}
+                  className={`px-3 py-1 border rounded ${page === i + 1 ? "bg-indigo-200" : ""
+                    }`}
                 >
                   {i + 1}
                 </button>
               ))}
               <button
-                onClick={() =>
-                  setPage((p) => Math.min(p + 1, totalPages))
-                }
+                onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
                 disabled={page === totalPages}
                 className="px-3 py-1 border rounded"
               >

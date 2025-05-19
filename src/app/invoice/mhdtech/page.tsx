@@ -2,7 +2,8 @@
 
 import React, { FC, useState, useMemo, useCallback, useEffect } from 'react';
 import Link from 'next/link';
-import { FaSort, FaSortUp, FaSortDown, FaPlus, FaChevronDown, FaChevronUp } from 'react-icons/fa';
+import { useRouter } from 'next/navigation';
+import { FaSort, FaSortUp, FaSortDown, FaPlus, FaChevronDown, FaChevronUp, FaEdit } from 'react-icons/fa';
 // ← import our shared helper
 import { post } from '@/app/utils/apiClient';
 
@@ -40,6 +41,8 @@ type APIResponse = {
 };
 
 const InvoiceHistoryPage: FC = () => {
+  const router = useRouter();
+
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -144,6 +147,11 @@ const InvoiceHistoryPage: FC = () => {
   const totalPages = Math.ceil(filtered.length / perPage);
   const pageData = filtered.slice((page - 1) * perPage, page * perPage);
 
+  const handleCopyToGenerate = (invoice: Invoice) => {
+    router.push(
+      `/invoice/mhdtech/generate?id=${encodeURIComponent(invoice.id)}`)
+  };
+
   return (
     <div className="min-h-screen bg-indigo-100 p-4">
       <div className="max-w-6xl mx-auto bg-white rounded-lg shadow p-6 flex flex-col">
@@ -194,6 +202,14 @@ const InvoiceHistoryPage: FC = () => {
                     <button onClick={() => toggleRow(inv.id)}>
                       {expandedRow === inv.id ? <FaChevronUp /> : <FaChevronDown />}
                     </button>
+                    <button
+                      onClick={() => handleCopyToGenerate(inv)}
+                      className="mt-2 px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600"
+                      title="Copy & Generate"
+                    >
+                      <FaEdit />
+                    </button>
+
                   </div>
                   {expandedRow === inv.id && (
                     <div className="mt-3 space-y-2">
@@ -257,11 +273,19 @@ const InvoiceHistoryPage: FC = () => {
                         <td className="px-3 py-2 whitespace-nowrap">{inv.bill_to.name}</td>
                         <td className="px-3 py-2 whitespace-nowrap">${inv.total_amount.toFixed(2)}</td>
                         <td className="px-3 py-2 whitespace-nowrap">{inv.payment_method === 0 ? 'PayPal' : 'Bank Transfer'}</td>
-                        <td className="px-3 py-2 whitespace-nowrap">
-                          <button onClick={() => toggleRow(inv.id)}>
+                        <td className="px-3 py-2 whitespace-nowrap space-x-2">
+                          <button onClick={() => toggleRow(inv.id)} className="text-indigo-600 hover:underline">
                             {expandedRow === inv.id ? <FaChevronUp /> : <FaChevronDown />}
                           </button>
+                          <button
+                            onClick={() => handleCopyToGenerate(inv)}
+                            className="text-green-600 hover:underline"
+                            title="Copy & Generate"
+                          >
+                            <FaEdit />
+                          </button>
                         </td>
+
                       </tr>
                       {expandedRow === inv.id && (
                         <tr className="border-b bg-gray-50">
@@ -301,7 +325,7 @@ const InvoiceHistoryPage: FC = () => {
         )}
 
         {/* Pagination */}
-        <div className="mt-4 flex justify-center">
+        <div className="mt-4 flex justify-center flex-wrap">
           <button
             onClick={() => handlePage(page - 1)}
             disabled={page === 1}
@@ -313,9 +337,8 @@ const InvoiceHistoryPage: FC = () => {
             <button
               key={i}
               onClick={() => handlePage(i + 1)}
-              className={`px-3 py-1 border rounded-lg mx-1 ${
-                page === i + 1 ? 'bg-indigo-100' : ''
-              }`}
+              className={`px-3 py-1 border rounded-lg mx-1 ${page === i + 1 ? 'bg-indigo-600 text-white' : ''
+                }`}
             >
               {i + 1}
             </button>

@@ -4,13 +4,14 @@ import React, {
   FC,
   useState,
   useCallback,
-  useMemo
+  useMemo,
+  useEffect
 } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { saveAs } from "file-saver";
 import Swal from 'sweetalert2';
-import { postBlob } from "@/app/utils/apiClient";
+import { postBlob, post } from "@/app/utils/apiClient";
 
 interface Item {
   description: string;
@@ -112,8 +113,58 @@ const ItemRow: FC<{
 
 const GenerateInvoicePage: FC = () => {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const invoiceId = searchParams.get("id");
   const [data, setData] = useState<InvoiceData>(initialData);
   const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    const convertDateToISO = (dateStr: string) => {
+      if (!dateStr) return "";
+      const [day, month, year] = dateStr.split("-");
+      return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+    };
+
+    const fetchInvoiceData = async () => {
+      if (!invoiceId) return;
+
+      try {
+        const res = await post("/invoiceEnoylityLLC/getinvoice", { id: invoiceId });
+
+        if (res?.success && res.data) {
+          const invoice = res.data;
+
+          setData({
+            billDate: convertDateToISO(invoice.invoice_date) || "",
+            dueDate: convertDateToISO(invoice.due_date) || "",
+            clientName: invoice.bill_to?.name || "",
+            clientAddress: invoice.bill_to?.address || "",
+            clientEmail: invoice.bill_to?.email || "",
+            clientPhone: invoice.bill_to?.bt_phone || "",
+            paymentMethod:
+              invoice.payment_method === 0
+                ? "PayPal"
+                : invoice.payment_method === 1
+                  ? "Bank Transfer"
+                  : "",
+            items:
+              Array.isArray(invoice.items) && invoice.items.length > 0
+                ? invoice.items
+                : [initialItem],
+            notes: invoice.note || "",
+            bankNote: invoice.bank_Note || "",
+          });
+        } else {
+          console.warn("Failed to fetch invoice:", res?.message);
+        }
+      } catch (error) {
+        console.error("Error fetching invoice data:", error);
+      }
+    };
+
+    fetchInvoiceData();
+  }, [invoiceId]);
+
 
   const handleFieldChange = useCallback(
     (
@@ -137,10 +188,10 @@ const GenerateInvoicePage: FC = () => {
         items: prev.items.map((it, i) =>
           i === index
             ? {
-                ...it,
-                [field]:
-                  field === "description" ? value : Number(value),
-              }
+              ...it,
+              [field]:
+                field === "description" ? value : Number(value),
+            }
             : it
         ),
       }));
@@ -220,8 +271,8 @@ const GenerateInvoicePage: FC = () => {
         data.paymentMethod === "PayPal"
           ? 0
           : data.paymentMethod === "Bank Transfer"
-          ? 1
-          : 2,
+            ? 1
+            : 2,
       bank_Note:
         data.paymentMethod === "Bank Transfer" ? data.bankNote : "",
     };
@@ -232,7 +283,7 @@ const GenerateInvoicePage: FC = () => {
         "/invoiceEnoylityLLC/generate-invoice",
         payload
       );
-      saveAs(blob, `invoice_${formattedInvoiceDate}.pdf`);
+      saveAs(blob, `invoice_${payload.bill_to_name}.pdf`);
 
       await Swal.fire({
         icon: "success",
@@ -394,11 +445,10 @@ const GenerateInvoicePage: FC = () => {
             <button
               type="submit"
               disabled={!isValid || isLoading}
-              className={`px-4 py-2 rounded-lg text-white ${
-                isValid && !isLoading
-                  ? "bg-indigo-600 hover:bg-indigo-700"
-                  : "bg-gray-400 cursor-not-allowed"
-              }`}
+              className={`px-4 py-2 rounded-lg text-white ${isValid && !isLoading
+                ? "bg-indigo-600 hover:bg-indigo-700"
+                : "bg-gray-400 cursor-not-allowed"
+                }`}
             >
               {isLoading ? "Generating…" : "Generate"}
             </button>

@@ -2,6 +2,7 @@
 
 import React, { FC, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   FaSort,
   FaSortUp,
@@ -9,6 +10,7 @@ import {
   FaPlus,
   FaChevronDown,
   FaChevronUp,
+  FaEdit
 } from "react-icons/fa";
 import { post } from "@/app/utils/apiClient";
 
@@ -45,6 +47,8 @@ type ListResp = {
 };
 
 const InvoiceHistoryPage: FC = () => {
+  const router = useRouter();
+
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -108,9 +112,9 @@ const InvoiceHistoryPage: FC = () => {
     } catch (err: any) {
       setError(
         err.message ||
-          (err.response?.data?.message
-            ? err.response.data.message
-            : "Network or server error.")
+        (err.response?.data?.message
+          ? err.response.data.message
+          : "Network or server error.")
       );
     } finally {
       setLoading(false);
@@ -140,6 +144,11 @@ const InvoiceHistoryPage: FC = () => {
 
   const handlePageChange = (newPage: number) => {
     if (newPage >= 1 && newPage <= totalPages) setPage(newPage);
+  };
+
+  const handleCopyToGenerate = (invoice: Invoice) => {
+    router.push(
+      `/invoice/enoylitystudio/generate?id=${encodeURIComponent(invoice.id)}`)
   };
 
   return (
@@ -204,6 +213,13 @@ const InvoiceHistoryPage: FC = () => {
                       ) : (
                         <FaChevronDown />
                       )}
+                    </button>
+                    <button
+                      onClick={() => handleCopyToGenerate(inv)}
+                      className="mt-2 px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600"
+                      title="Copy & Generate"
+                    >
+                      <FaEdit />
                     </button>
                   </div>
                   {expandedRow === inv.id && (
@@ -329,6 +345,13 @@ const InvoiceHistoryPage: FC = () => {
                               <FaChevronDown />
                             )}
                           </button>
+                          <button
+                            onClick={() => handleCopyToGenerate(inv)}
+                            className="text-green-600 hover:underline"
+                            title="Copy & Generate"
+                          >
+                            <FaEdit />
+                          </button>
                         </td>
                       </tr>
                       {expandedRow === inv.id && (
@@ -384,9 +407,8 @@ const InvoiceHistoryPage: FC = () => {
                 <button
                   key={i}
                   onClick={() => handlePageChange(i + 1)}
-                  className={`px-3 py-1 border rounded ${
-                    page === i + 1 ? "bg-indigo-200" : ""
-                  }`}
+                  className={`px-3 py-1 border rounded ${page === i + 1 ? "bg-indigo-200" : ""
+                    }`}
                 >
                   {i + 1}
                 </button>

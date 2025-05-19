@@ -1,10 +1,10 @@
 "use client";
 
-import React, { FC, useState, useCallback, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import React, { FC, useState, useCallback, useMemo, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Swal from "sweetalert2";
-import { postBlob } from "@/app/utils/apiClient";
+import { postBlob, get, post } from "@/app/utils/apiClient";
 
 interface Item {
   description: string;
@@ -14,6 +14,8 @@ interface Item {
 
 const GenerateInvoicePage: FC = () => {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const invoiceId = searchParams.get("id");
 
   const [billDate, setBillDate] = useState("");
   const [dueDate, setDueDate] = useState("");
@@ -27,6 +29,38 @@ const GenerateInvoicePage: FC = () => {
   const [notes, setNotes] = useState("");
   const [bankNote, setBankNote] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+
+  const convertToInputDate = (dateStr: string) => {
+    const [day, month, year] = dateStr.split("-");
+    return `${year}-${month}-${day}`;
+  };
+
+
+  useEffect(() => {
+    if (invoiceId) {
+      const fetchInvoiceData = async () => {
+        try {
+          const res = await post(`/invoiceMHD/getinvoice`, { id: invoiceId });
+          const data = res.data;
+
+          setBillDate(convertToInputDate(data.invoice_date));
+          setDueDate(convertToInputDate(data.due_date));
+          setClientName(data.bill_to?.name || "");
+          setClientAddress(data.bill_to?.address || "");
+          setClientCity("");
+          setClientEmail(data.bill_to?.email || "");
+          setClientPhone(data.bill_to?.phone || "");
+          setPaymentMethod(data.payment_method === 0 ? "PayPal" : "Bank Transfer");
+          setItems(data.items || []);
+          setNotes(data.notes || "");
+        } catch (error) {
+          console.error("Error fetching invoice data:", error);
+        }
+      };
+
+      fetchInvoiceData();
+    }
+  }, [invoiceId]);
 
   const handleAddItem = useCallback(() => {
     setItems((prev) => [...prev, { description: "", quantity: 1, price: 0 }]);
@@ -42,9 +76,9 @@ const GenerateInvoicePage: FC = () => {
         prev.map((it, i) =>
           i === index
             ? {
-                ...it,
-                [field]: field === "description" ? value : Number(value),
-              }
+              ...it,
+              [field]: field === "description" ? value : Number(value),
+            }
             : it
         )
       );
@@ -57,16 +91,16 @@ const GenerateInvoicePage: FC = () => {
     if (!billDate) return "";
     const d = new Date(billDate);
     return [d.getDate().toString().padStart(2, "0"),
-            (d.getMonth()+1).toString().padStart(2, "0"),
-            d.getFullYear()].join("-");
+    (d.getMonth() + 1).toString().padStart(2, "0"),
+    d.getFullYear()].join("-");
   }, [billDate]);
 
   const formattedDueDate = useMemo(() => {
     if (!dueDate) return "";
     const d = new Date(dueDate);
     return [d.getDate().toString().padStart(2, "0"),
-            (d.getMonth()+1).toString().padStart(2, "0"),
-            d.getFullYear()].join("-");
+    (d.getMonth() + 1).toString().padStart(2, "0"),
+    d.getFullYear()].join("-");
   }, [dueDate]);
 
   const isValid = useMemo(() =>
@@ -100,7 +134,7 @@ const GenerateInvoicePage: FC = () => {
       due_date: formattedDueDate,
       payment_method:
         paymentMethod === "PayPal" ? 0 :
-        paymentMethod === "Bank Transfer" ? 1 : 2,
+          paymentMethod === "Bank Transfer" ? 1 : 2,
       bank_Note: paymentMethod === "Bank Transfer" ? bankNote : "",
       items,
       notes,
@@ -112,7 +146,7 @@ const GenerateInvoicePage: FC = () => {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `invoice_${formattedBillDate}.pdf`;
+      link.download = `invoice_${payload.bill_to_name}.pdf`;
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -295,11 +329,10 @@ const GenerateInvoicePage: FC = () => {
             <button
               type="submit"
               disabled={!isValid || isLoading}
-              className={`px-4 py-2 rounded-lg text-white ${
-                isValid && !isLoading
-                  ? "bg-indigo-600 hover:bg-indigo-700"
-                  : "bg-gray-400 cursor-not-allowed"
-              }`}
+              className={`px-4 py-2 rounded-lg text-white ${isValid && !isLoading
+                ? "bg-indigo-600 hover:bg-indigo-700"
+                : "bg-gray-400 cursor-not-allowed"
+                }`}
             >
               {isLoading ? "Generating…" : "Generate"}
             </button>
