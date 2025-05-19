@@ -94,7 +94,7 @@ const InvoiceHistoryPage: FC = () => {
         const parsed = raw.map((invoice: any): Invoice => ({
           id: invoice._id,
           invoice_number: invoice.invoice_number,
-          invoice_date: invoice.date,
+          invoice_date: invoice.invoice_date,
           due_date: invoice.due_date,
           bill_to: {
             name: invoice.client_name,
@@ -347,7 +347,7 @@ const InvoiceHistoryPage: FC = () => {
                           </button>
                           <button
                             onClick={() => handleCopyToGenerate(inv)}
-                            className="text-green-600 hover:underline"
+                            className="px-3 text-green-600 hover:underline"
                             title="Copy & Generate"
                           >
                             <FaEdit />
