@@ -3,10 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "PORT=3001 next dev --turbopack",
     "build": "next build",
-    "start": "PORT=3001 next start",
-    "lint": "next lint"
+    "export": "next export",
+    "start": "serve out -l 3001"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.7",
@@ -33,6 +32,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "serve": "^14.2.4",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
