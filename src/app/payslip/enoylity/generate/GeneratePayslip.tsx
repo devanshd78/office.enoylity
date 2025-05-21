@@ -197,7 +197,7 @@ const GeneratePayslip: FC = () => {
   };
 
   const currentYear = new Date().getFullYear();
-  const yearOptions = [String(currentYear), String(currentYear + 1)];
+  const yearOptions = [String(currentYear-1), String(currentYear), String(currentYear + 1)];
 
   return (
     <div className="min-h-screen bg-indigo-100 p-4 sm:p-6">
