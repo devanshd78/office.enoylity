@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { useRouter } from "next/navigation";
 import Swal from "sweetalert2";
 import { post } from "@/app/utils/apiClient";
+import { Eye, Edit2, Trash2 } from "lucide-react";
 
 interface PayslipEntry {
   payslipId: string;
@@ -49,11 +50,11 @@ const PayslipHistory: FC = () => {
 
   const [role, setRole] = useState<string | null>(null);
   const [permissions, setPermissions] = useState<Record<string, number>>({});
-  
+
   useEffect(() => {
     const storedRole = localStorage.getItem("role");
     const storedPermissions = localStorage.getItem("permissions");
-  
+
     setRole(storedRole);
     setPermissions(storedPermissions ? JSON.parse(storedPermissions) : {});
   }, []);
@@ -104,15 +105,51 @@ const PayslipHistory: FC = () => {
     router.push("/payslip/enoylity/generate");
   };
 
+  const handleEditPayslip = (entry: PayslipEntry) => {
+    router.push(`/payslip/enoylity/generate?id=${entry.payslipId}`);
+  };
+
+  const handleDeletePayslip = async (entry: PayslipEntry) => {
+    const result = await Swal.fire({
+      title: 'Are you sure?',
+      text: "This will permanently delete the payslip.",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonText: 'Yes, delete it!',
+    });
+
+    if (result.isConfirmed) {
+      try {
+        setIsLoading(true);
+        const response = await post<{ success: boolean; message?: string }>(
+          '/employee/deletepayslip',
+          { id: entry.payslipId }
+        );
+        if (response.success) {
+          setData(prev => prev.filter(item => item.payslipId !== entry.payslipId));
+          setTotalRecords(prev => prev - 1);
+          await Swal.fire('Deleted!', 'Payslip has been deleted.', 'success');
+        } else {
+          throw new Error(response.message || 'Failed to delete payslip');
+        }
+      } catch (err: any) {
+        console.error('Error deleting payslip:', err);
+        await Swal.fire('Error', err.message || 'Could not delete payslip.', 'error');
+      } finally {
+        setIsLoading(false);
+      }
+    }
+  };
+
   const handleViewPdf = (entry: PayslipEntry) => {
     window.open(
       `${process.env.NEXT_PUBLIC_API_BASE_URL}/employee/viewpdf/${entry.payslipId}`,
-      "_blank",
-      "noopener,noreferrer"
+      '_blank',
+      'noopener,noreferrer'
     );
   };
-  
-  const paginatedData = data; // already server-paged
+
+  const paginatedData = data;
   const totalPages = Math.max(1, Math.ceil(totalRecords / rowsPerPage));
 
   return (
@@ -170,7 +207,7 @@ const PayslipHistory: FC = () => {
                       <TableHead>Employee ID</TableHead>
                       <TableHead>Month</TableHead>
                       <TableHead>Year</TableHead>
-                      <TableHead>Action</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -188,12 +225,30 @@ const PayslipHistory: FC = () => {
                           </TableCell>
                           <TableCell>{row.month}</TableCell>
                           <TableCell>{row.year}</TableCell>
-                          <TableCell>
+                          <TableCell className="flex items-center gap-4 justify-start">
                             <Button
-                              variant="outline"
+                              title="View PDF"
+                              variant="ghost"
+                              size="icon"
                               onClick={() => handleViewPdf(row)}
                             >
-                              View PDF
+                              <Eye className="h-5 w-5" />
+                            </Button>
+                            <Button
+                              title="Edit Payslip"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEditPayslip(row)}
+                            >
+                              <Edit2 className="h-5 w-5" />
+                            </Button>
+                            <Button
+                              title="Delete Payslip"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeletePayslip(row)}
+                            >
+                              <Trash2 className="h-5 w-5" />
                             </Button>
                           </TableCell>
                         </TableRow>
