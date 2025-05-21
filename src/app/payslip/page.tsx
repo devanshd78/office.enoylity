@@ -123,18 +123,30 @@ const PayslipHistory: FC = () => {
         setIsLoading(true);
         const response = await post<{ success: boolean; message?: string }>(
           '/employee/deletepayslip',
-          { id: entry.payslipId }
+          { payslipId: entry.payslipId }
         );
         if (response.success) {
           setData(prev => prev.filter(item => item.payslipId !== entry.payslipId));
           setTotalRecords(prev => prev - 1);
-          await Swal.fire('Deleted!', 'Payslip has been deleted.', 'success');
+          await Swal.fire({
+            icon: 'success',
+            title: 'Deleted!',
+            text: 'Payslip has been deleted.',
+            showConfirmButton: false,
+            timer: 1500,
+          });
         } else {
           throw new Error(response.message || 'Failed to delete payslip');
         }
       } catch (err: any) {
         console.error('Error deleting payslip:', err);
-        await Swal.fire('Error', err.message || 'Could not delete payslip.', 'error');
+        await Swal.fire({
+          icon: 'error',
+          title: 'Error',
+          text: err.message || 'Could not delete payslip.',
+          showConfirmButton: false,
+          timer: 1500,
+        });
       } finally {
         setIsLoading(false);
       }

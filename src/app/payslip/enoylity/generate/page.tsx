@@ -10,9 +10,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Swal from "sweetalert2";
-import { postBlob, post } from "@/app/utils/apiClient";  // <-- shared helpers
+import { postBlob, post, get } from "@/app/utils/apiClient";  // <-- shared helpers
 
 interface BankDetails {
   account_number: string;
@@ -39,11 +39,13 @@ interface SalaryComponent {
 
 const GeneratePayslip: FC = () => {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const payslipId = searchParams.get('id');
+
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<string>("");
   const [selectedYear, setSelectedYear] = useState<string>("");
-
   const [form, setForm] = useState<Record<string, string>>({
     basic: "",
     hra: "",
@@ -52,7 +54,7 @@ const GeneratePayslip: FC = () => {
     lop: "",
     others: "",
   });
-
+  const [tds, setTds] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
 
   // Fetch employee list once
@@ -76,6 +78,51 @@ const GeneratePayslip: FC = () => {
     })();
   }, []);
 
+  useEffect(() => {
+    if (!payslipId) return;
+    (async () => {
+      setIsLoading(true);
+      try {
+        const resp = await get<{ success: boolean; data: { payslip: any }; message: string }>(
+          `/employee/getpayslip?payslipId=${payslipId}`
+        );
+        if (!resp.success) throw new Error(resp.message || 'Failed to load payslip');
+
+        const payslip = resp.data.payslip;
+        // Employee lookup
+        const emp = employees.find(e => e.employeeId === payslip.employeeId);
+        if (emp) setSelectedEmployee(emp);
+
+        // Month & year
+        const monthName = payslip.month;
+        const yearNum = payslip.year;
+        const monthNum = String(new Date(`${monthName} 1, ${yearNum}`).getMonth() + 1).padStart(2, '0');
+        setSelectedMonth(monthNum);
+        setSelectedYear(String(yearNum));
+        setTds(String(payslip.emp_snapshot['Tax Deduction at Source (TDS)'] || 0));
+
+        // Populate salary components
+        const compMap: Record<string, string> = {};
+        payslip.salary_structure.forEach((comp: any) => {
+          switch (comp.name) {
+            case 'Basic Pay': compMap.basic = String(comp.amount); break;
+            case 'House Rent Allowance': compMap.hra = String(comp.amount); break;
+            case 'Overtime Bonus': compMap.overtime = String(comp.amount); break;
+            case 'Performance Bonus': compMap.bonus = String(comp.amount); break;
+            case 'Special Allowance': compMap.others = String(comp.amount); break;
+          }
+        });
+        compMap.lop = String(payslip.lop_days ?? 0);
+        setForm(compMap);
+      } catch (err: any) {
+        console.error(err);
+        await Swal.fire({ icon: 'error', title: 'Load Failed', text: err.message });
+      } finally {
+        setIsLoading(false);
+      }
+    })();
+  }, [payslipId, employees]);
+
   const handleInput = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const { name, value } = e.target;
@@ -96,14 +143,14 @@ const GeneratePayslip: FC = () => {
     }
 
     // Prepare payload
-    const todayStr = new Date().toLocaleDateString("en-GB"); // e.g. "29/04/2025"
+    const todayStr = new Date().toLocaleDateString("en-GB");
 
     const salary_structure: SalaryComponent[] = [
-      { name: "Basic Pay",              amount: parseFloat(form.basic)   || 0 },
-      { name: "House Rent Allowance",   amount: parseFloat(form.hra)     || 0 },
-      { name: "Overtime Bonus",         amount: parseFloat(form.overtime)|| 0 },
-      { name: "Performance Bonus",      amount: parseFloat(form.bonus)   || 0 },
-      { name: "Special Allowance",      amount: parseFloat(form.others)  || 0 },
+      { name: "Basic Pay", amount: parseFloat(form.basic) || 0 },
+      { name: "House Rent Allowance", amount: parseFloat(form.hra) || 0 },
+      { name: "Overtime Bonus", amount: parseFloat(form.overtime) || 0 },
+      { name: "Performance Bonus", amount: parseFloat(form.bonus) || 0 },
+      { name: "Special Allowance", amount: parseFloat(form.others) || 0 },
     ];
 
     const payload = {
@@ -112,6 +159,7 @@ const GeneratePayslip: FC = () => {
       date: todayStr.split("/").join("-"), // "DD-MM-YYYY"
       month: `${selectedMonth}-${selectedYear}`,
       salary_structure,
+      "Tax Deduction at Source (TDS)": parseFloat(tds) || 0,
     };
 
     setIsLoading(true);
@@ -272,6 +320,19 @@ const GeneratePayslip: FC = () => {
               />
             </div>
           ))}
+        </div>
+
+        {/* TDS */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium mb-1">TDS Deduction</label>
+          <Input
+            name="tds"
+            type="number"
+            value={tds}
+            onChange={(e) => setTds(e.target.value)}
+            disabled={isLoading}
+            placeholder="TDS Deduction"
+          />
         </div>
 
         <Button
