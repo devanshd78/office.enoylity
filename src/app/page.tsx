@@ -7,7 +7,7 @@ interface Option {
   title: string;
   route: string;
   icon: string;
-  permissionKey?: string; // optional property
+  permissionKey?: string;
 }
 
 interface Group {
@@ -16,7 +16,6 @@ interface Group {
   options: Option[];
   color: keyof typeof colorClasses;
 }
-
 
 const colorClasses: Record<string, { headerText: string; headerBorder: string; iconBg: string; iconText: string }> = {
   indigo: {
@@ -59,7 +58,9 @@ const groups: Group[] = [
   {
     title: 'Payslip',
     permissionKeys: ['Generate payslip', 'View payslip details'],
-    options: [{ title: 'Enoylity Studio', route: '/payslip', icon: '📄' }],
+    options: [
+      { title: 'Enoylity Studio', route: '/payslip', icon: '📄' }
+    ],
     color: 'emerald',
   },
   {
@@ -72,9 +73,20 @@ const groups: Group[] = [
     color: 'teal',
   },
   {
+    title: 'KPI',
+    permissionKeys: ['Manage KPI'],
+    options: [
+      { title: 'Add KPI', route: '/kpi/addupdate', icon: '➕📈', permissionKey: 'Manage KPI' },
+      { title: 'View KPI', route: '/kpi', icon: '📈', permissionKey: 'Manage KPI' },
+    ],
+    color: 'amber',
+  },
+  {
     title: 'User Access',
     permissionKeys: [],
-    options: [{ title: 'Manage', route: '/useraccess', icon: '🛡️' }],
+    options: [
+      { title: 'Manage', route: '/useraccess', icon: '🛡️' }
+    ],
     color: 'amber',
   },
   {
@@ -87,9 +99,7 @@ const groups: Group[] = [
     ],
     color: 'amber',
   }
-  
 ];
-
 
 const Dashboard: FC = () => {
   const router = useRouter();
@@ -121,7 +131,6 @@ const Dashboard: FC = () => {
         {groups
           .filter((group) => {
             if (role === 'admin') return true;
-            // subadmin: check if any permission keys in the group are allowed
             return group.permissionKeys.some((key) => hasPermission(key));
           })
           .map((group, gi) => {
@@ -139,7 +148,6 @@ const Dashboard: FC = () => {
                   {group.options
                     .filter((opt) => {
                       if (role === 'admin') return true;
-                      // If specific permissionKey exists, check it; otherwise assume group-level permission
                       const permKey = opt.permissionKey;
                       return permKey ? hasPermission(permKey) : true;
                     })

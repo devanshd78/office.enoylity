@@ -1,17 +1,17 @@
 "use client";
 
-import React, { useState, useEffect, FC, JSX } from 'react';
+import React, { useState, useEffect, FC } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { Lexend } from 'next/font/google';
 import { BsBuilding } from 'react-icons/bs';
-import { FaFileInvoiceDollar, FaMoneyCheckAlt, FaUsers } from 'react-icons/fa';
-import { FiChevronUp, FiChevronDown, FiLogOut, FiMoreHorizontal, FiSettings, FiMenu } from 'react-icons/fi';
+import { FaFileInvoiceDollar, FaMoneyCheckAlt, FaUsers, FaChartLine } from 'react-icons/fa';
+import { FiChevronUp, FiChevronDown, FiLogOut, FiSettings, FiMenu } from 'react-icons/fi';
 import Header from './topbar';
 
 // Load Lexend font if needed
 const lexend = Lexend({ subsets: ['latin'], weight: ['400', '700'] });
 
-type NavItem = 'dashboard' | 'invoice' | 'payslip' | 'employee' | 'useraccess' | 'settings';
+type NavItem = 'dashboard' | 'invoice' | 'payslip' | 'employee' | 'useraccess' | 'settings' | 'kpi';
 type SubMenuItem = 'mhdtech' | 'enoylitystudio' | 'enoylitytech';
 type SubSettingItem = 'invoice' | 'payslip' | 'update';
 
@@ -22,7 +22,7 @@ const invoiceSubMenus: { key: SubMenuItem; label: string }[] = [
   { key: 'enoylitytech', label: 'Enoylity Media Creations LLC' },
 ];
 
-const setingsSubMenus: { key: SubSettingItem; label: string }[] = [
+const settingsSubMenus: { key: SubSettingItem; label: string }[] = [
   { key: 'invoice', label: 'Invoice' },
   { key: 'payslip', label: 'Payslip' },
   { key: 'update', label: 'Update Login' }
@@ -32,30 +32,28 @@ const Sidebar: FC = () => {
   const router = useRouter();
   const pathname = usePathname();
 
-  // Which panels to hide
-  const [hiddenPanels, setHiddenPanels] = useState<NavItem[]>([]);
+  // Panels visible based on role/permissions
+  const [visiblePanels, setVisiblePanels] = useState<NavItem[]>([]);
 
-  // Desktop invoice collapse
+  // Desktop invoice and settings collapse state
   const [openInvoice, setOpenInvoice] = useState(false);
   const [openSettings, setOpenSettings] = useState(false);
 
-  // Mobile submenu & logout
+  // Mobile state
   const [mobileSubMenu, setMobileSubMenu] = useState<NavItem | null>(null);
-  const [showLogoutMobile, setShowLogoutMobile] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
-  const getHiddenPanels = (): NavItem[] => {
+  const getVisiblePanels = (): NavItem[] => {
     const role = localStorage.getItem('role');
     if (role === 'admin') {
-      return ['dashboard', 'invoice', 'payslip', 'employee', 'useraccess', 'settings']; // Show all
+      return ['dashboard', 'invoice', 'payslip', 'employee', 'useraccess', 'settings', 'kpi'];
     }
 
     const permissionsRaw = localStorage.getItem('permissions');
-    if (!permissionsRaw) return [];
+    if (!permissionsRaw) return ['dashboard', 'kpi'];
 
     try {
       const permissions = JSON.parse(permissionsRaw);
-
       const visible: NavItem[] = [];
       if (permissions['View Invoice details'] || permissions['Generate invoice details']) {
         visible.push('invoice');
@@ -72,35 +70,37 @@ const Sidebar: FC = () => {
       if (permissions['Manage Settings']) {
         visible.push('settings');
       }
-      visible.push('dashboard'); // Always show dashboard
+      // Always show dashboard and KPI
+      visible.push('dashboard');
+      visible.push('kpi');
 
       return visible;
     } catch {
-      return [];
+      return ['dashboard', 'kpi'];
     }
   };
 
   useEffect(() => {
-    setHiddenPanels(getHiddenPanels());
+    setVisiblePanels(getVisiblePanels());
   }, []);
 
   useEffect(() => {
     // automatically open invoice submenu if on an invoice route
     setOpenInvoice(pathname.startsWith('/invoice'));
+    setOpenSettings(pathname.startsWith('/settings'));
   }, [pathname]);
 
-  const selectedNav: NavItem | '' = (
+  const selectedNav: NavItem | '' =
     pathname === '/' ? 'dashboard' :
-      pathname.startsWith('/invoice') ? 'invoice' :
-        pathname.startsWith('/payslip') ? 'payslip' :
-          pathname.startsWith('/employee') ? 'employee' :
-            pathname.startsWith('/useraccess') ? 'useraccess' :
-              pathname.startsWith('/settings') ? 'settings' : ''
-  );
+    pathname.startsWith('/invoice') ? 'invoice' :
+    pathname.startsWith('/payslip') ? 'payslip' :
+    pathname.startsWith('/employee') ? 'employee' :
+    pathname.startsWith('/useraccess') ? 'useraccess' :
+    pathname.startsWith('/settings') ? 'settings' :
+    pathname.startsWith('/kpi') ? 'kpi' : '';
 
   const navigateTo = (path: string) => {
     setMobileSubMenu(null);
-    setShowLogoutMobile(false);
     void router.push(path);
   };
 
@@ -113,51 +113,43 @@ const Sidebar: FC = () => {
     } catch (err) {
       console.error('Error clearing localStorage:', err);
     }
-    setHiddenPanels([]);
+    setVisiblePanels([]);
     void router.push('/login');
-  };
-
-
-  const toggleInvoice = () => setOpenInvoice(prev => !prev);
-  const toggleSettings = () => setOpenSettings(prev => !prev);
-
-  const handleMobileNav = (item: NavItem) => {
-    if (item === 'invoice' || item === 'settings') {
-      setMobileSubMenu(prev => (prev === item ? null : item));
-    } else {
-      setMobileSidebarOpen(false);
-      navigateTo(item === 'dashboard' ? '/' : `/${item}`);
-    }
   };
 
   const menuItemBase = 'flex items-center px-3 py-2 rounded-lg cursor-pointer transition hover:bg-indigo-600 hover:text-white';
   const activeClass = 'bg-indigo-100 text-indigo-700';
 
-  // Utility: should we show this nav item?
-  const isVisible = (item: NavItem) => hiddenPanels.includes(item);
+  const isVisible = (item: NavItem) => visiblePanels.includes(item);
 
   return (
     <>
-      {/* Desktop sidebar */}
       <Header onMenuClick={() => setMobileSidebarOpen(prev => !prev)} />
 
+      {/* Desktop sidebar */}
       <aside className={`${lexend.className} hidden sm:flex flex-col fixed top-0 left-0 h-screen w-60 border-r bg-white`}>
-        <div className="flex items-center p-4 cursor-pointer" onClick={() => navigateTo('/')}>
+        <div className="flex items-center p-4 cursor-pointer" onClick={() => navigateTo('/')}
+        >
           <BsBuilding className="mr-2 text-2xl text-indigo-600" />
           <span className="text-l font-medium">Enoylity Dashboard</span>
         </div>
 
-
         <nav className="flex-1 overflow-y-auto p-2 space-y-2">
+          {isVisible('dashboard') && (
+            <div className={`${menuItemBase} ${selectedNav === 'dashboard' ? activeClass : ''}`} onClick={() => navigateTo('/')}
+            >
+              <BsBuilding className="mr-3 text-lg" /> Dashboard
+            </div>
+          )}
+
           {isVisible('invoice') && (
             <>
               <div
                 className={`${menuItemBase} justify-between ${selectedNav === 'invoice' ? activeClass : ''}`}
-                onClick={toggleInvoice}
+                onClick={() => setOpenInvoice(prev => !prev)}
               >
                 <div className="flex items-center">
-                  <FaFileInvoiceDollar className="mr-3 text-lg" />
-                  Invoice
+                  <FaFileInvoiceDollar className="mr-3 text-lg" /> Invoice
                 </div>
                 {openInvoice ? <FiChevronUp /> : <FiChevronDown />}
               </div>
@@ -169,8 +161,7 @@ const Sidebar: FC = () => {
                       className={`${menuItemBase} !px-0 ${pathname === `/invoice/${key}` ? activeClass : ''}`}
                       onClick={() => navigateTo(`/invoice/${key}`)}
                     >
-                      <FaFileInvoiceDollar className="mr-3 text-lg" />
-                      {label}
+                      <FaFileInvoiceDollar className="mr-3 text-lg" /> {label}
                     </div>
                   ))}
                 </div>
@@ -183,8 +174,7 @@ const Sidebar: FC = () => {
               className={`${menuItemBase} ${selectedNav === 'payslip' ? activeClass : ''}`}
               onClick={() => navigateTo('/payslip')}
             >
-              <FaMoneyCheckAlt className="mr-3 text-lg" />
-              Payslip
+              <FaMoneyCheckAlt className="mr-3 text-lg" /> Payslip
             </div>
           )}
 
@@ -193,8 +183,7 @@ const Sidebar: FC = () => {
               className={`${menuItemBase} ${selectedNav === 'employee' ? activeClass : ''}`}
               onClick={() => navigateTo('/employee')}
             >
-              <FaUsers className="mr-3 text-lg" />
-              Employee
+              <FaUsers className="mr-3 text-lg" /> Employee
             </div>
           )}
 
@@ -203,8 +192,16 @@ const Sidebar: FC = () => {
               className={`${menuItemBase} ${selectedNav === 'useraccess' ? activeClass : ''}`}
               onClick={() => navigateTo('/useraccess')}
             >
-              <FaUsers className="mr-3 text-lg rotate-180" />
-              User Access
+              <FaUsers className="mr-3 text-lg rotate-180" /> User Access
+            </div>
+          )}
+
+           {isVisible('kpi') && (
+            <div
+              className={`${menuItemBase} ${selectedNav === 'kpi' ? activeClass : ''}`}
+              onClick={() => navigateTo('/kpi')}
+            >
+              <FaChartLine className="mr-3 text-lg" /> KPI
             </div>
           )}
 
@@ -212,24 +209,22 @@ const Sidebar: FC = () => {
             <>
               <div
                 className={`${menuItemBase} justify-between ${selectedNav === 'settings' ? activeClass : ''}`}
-                onClick={toggleSettings}
+                onClick={() => setOpenSettings(prev => !prev)}
               >
                 <div className="flex items-center">
-                  <FiSettings className="mr-3 text-lg" />
-                  Settings
+                  <FiSettings className="mr-3 text-lg" /> Settings
                 </div>
                 {openSettings ? <FiChevronUp /> : <FiChevronDown />}
               </div>
               {openSettings && (
                 <div className="pl-8 space-y-1">
-                  {setingsSubMenus.map(({ key, label }) => (
+                  {settingsSubMenus.map(({ key, label }) => (
                     <div
                       key={key}
                       className={`${menuItemBase} !px-0 ${pathname === `/settings/${key}` ? activeClass : ''}`}
                       onClick={() => navigateTo(`/settings/${key}`)}
                     >
-                      <FaFileInvoiceDollar className="mr-3 text-lg" />
-                      {label}
+                      <FiSettings className="mr-3 text-lg" /> {label}
                     </div>
                   ))}
                 </div>
@@ -261,12 +256,19 @@ const Sidebar: FC = () => {
               <button onClick={() => setMobileSidebarOpen(false)}>✕</button>
             </div>
 
-            {(['dashboard', 'invoice', 'payslip', 'employee', 'useraccess', 'settings'] as NavItem[])
+            {(['dashboard', 'invoice', 'payslip', 'employee', 'useraccess', 'settings', 'kpi'] as NavItem[])
               .filter(isVisible)
               .map((item) => (
                 <div key={item}>
                   <button
-                    onClick={() => handleMobileNav(item)}
+                    onClick={() => {
+                      if (item === 'invoice' || item === 'settings') {
+                        setMobileSubMenu(prev => (prev === item ? null : item));
+                      } else {
+                        navigateTo(item === 'dashboard' ? '/' : `/${item}`);
+                        setMobileSidebarOpen(false);
+                      }
+                    }}
                     className="w-full flex items-center px-3 py-2 rounded-lg text-left hover:bg-indigo-100"
                   >
                     {item === 'dashboard' && <BsBuilding className="mr-3 text-lg" />}
@@ -274,19 +276,19 @@ const Sidebar: FC = () => {
                     {item === 'payslip' && <FaMoneyCheckAlt className="mr-3 text-lg" />}
                     {item === 'employee' && <FaUsers className="mr-3 text-lg" />}
                     {item === 'useraccess' && <FaUsers className="mr-3 text-lg rotate-180" />}
+                    {item === 'kpi' && <FaChartLine className="mr-3 text-lg" />}
                     {item === 'settings' && <FiSettings className="mr-3 text-lg" />}
                     <span className="capitalize">{item}</span>
                   </button>
 
-                  {/* Nested submenu for invoice/settings */}
-                  {mobileSubMenu === item && (
+                  {(mobileSubMenu === item && (item === 'invoice' ? invoiceSubMenus : settingsSubMenus)) && (
                     <div className="ml-6 mt-2 space-y-2">
-                      {(item === 'invoice' ? invoiceSubMenus : setingsSubMenus).map(({ key, label }) => (
+                      {(item === 'invoice' ? invoiceSubMenus : settingsSubMenus).map(({ key, label }) => (
                         <button
                           key={key}
                           onClick={() => {
-                            setMobileSidebarOpen(false);
                             navigateTo(`/${item}/${key}`);
+                            setMobileSidebarOpen(false);
                           }}                          
                           className="w-full flex items-center px-3 py-2 rounded-lg text-left hover:bg-indigo-200"
                         >

@@ -20,6 +20,7 @@ type LoginResponse = {
     adminId?: string;
     subadminId?: string;
     permissions?: Record<string, any>;
+    employeeId: string;
   };
 };
 
@@ -64,7 +65,7 @@ const LoginPage: React.FC = () => {
       });
 
       if (result.success) {
-        const { role, adminId, subadminId, permissions } = result.data;
+        const { role, adminId, subadminId, permissions, employeeId } = result.data;
 
         localStorage.setItem('role', role);
         if (role === 'admin') {
@@ -72,6 +73,7 @@ const LoginPage: React.FC = () => {
         } else {
           localStorage.setItem('subadminId', subadminId!);
           localStorage.setItem('permissions', JSON.stringify(permissions || {}));
+          localStorage.setItem('employeeId', employeeId);
         }
 
         Swal.fire({

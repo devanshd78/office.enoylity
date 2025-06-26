@@ -5,6 +5,7 @@ import Swal from 'sweetalert2';
 import { useRouter } from 'next/navigation';
 import { post } from '@/app/utils/apiClient';
 
+// 1️⃣ Define the available permissions, including KPI management
 const permissionsList = [
   'View payslip details',
   'Generate payslip',
@@ -12,6 +13,7 @@ const permissionsList = [
   'Generate invoice details',
   'Add Employee Details',
   'View Employee Details',
+  'Manage KPI',
 ];
 
 interface Employee {
@@ -28,7 +30,7 @@ const ManageAccess: FC = () => {
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
-  // 1️⃣ Load employee list
+  // Load employee list
   useEffect(() => {
     (async () => {
       setIsLoading(true);
@@ -38,7 +40,7 @@ const ManageAccess: FC = () => {
           data: { employees: Employee[] };
           message?: string;
         }>('/employee/getlist', { page: 1, pageSize: 100 });
-        
+
         if (result.success) {
           setEmployees(result.data.employees);
         } else {
@@ -59,19 +61,17 @@ const ManageAccess: FC = () => {
 
   const handlePermissionToggle = (perm: string) => {
     setSelectedPermissions(prev =>
-      prev.includes(perm)
-        ? prev.filter(p => p !== perm)
-        : [...prev, perm]
+      prev.includes(perm) ? prev.filter(p => p !== perm) : [...prev, perm]
     );
   };
 
-  // 2️⃣ Submit new subadmin
+  // Submit new subadmin with selected permissions
   const handleSubmit = async () => {
     if (!selectedEmployee || !username || !password || selectedPermissions.length === 0) {
       await Swal.fire({
         icon: 'warning',
         title: 'Incomplete Form',
-        text: 'Please fill all fields and pick at least one permission.'
+        text: 'Please fill all fields and pick at least one permission.',
       });
       return;
     }
@@ -101,14 +101,14 @@ const ManageAccess: FC = () => {
           title: 'Registered!',
           text: 'Subadmin created successfully.',
           timer: 1500,
-          showConfirmButton: false
+          showConfirmButton: false,
         });
-        // clear form
+        // Reset form and navigate back
         setSelectedEmployee('');
         setUsername('');
         setPassword('');
         setSelectedPermissions([]);
-        router.push('/useraccess'); // navigate back
+        router.push('/useraccess');
       } else {
         throw new Error(result.message || 'Registration failed');
       }
@@ -150,9 +150,7 @@ const ManageAccess: FC = () => {
         </select>
 
         {/* Username & Password */}
-        <label className="block mb-2 text-sm font-medium text-gray-700">
-          Username
-        </label>
+        <label className="block mb-2 text-sm font-medium text-gray-700">Username</label>
         <input
           type="text"
           value={username}
@@ -161,9 +159,7 @@ const ManageAccess: FC = () => {
           className="w-full mb-4 p-2 border rounded-lg"
         />
 
-        <label className="block mb-2 text-sm font-medium text-gray-700">
-          Password
-        </label>
+        <label className="block mb-2 text-sm font-medium text-gray-700">Password</label>
         <input
           type="password"
           value={password}
@@ -173,9 +169,7 @@ const ManageAccess: FC = () => {
         />
 
         {/* Permissions */}
-        <p className="text-sm font-medium text-gray-700 mb-2">
-          Assign Permissions
-        </p>
+        <p className="text-sm font-medium text-gray-700 mb-2">Assign Permissions</p>
         <div className="space-y-2 mb-4">
           {permissionsList.map(perm => (
             <label key={perm} className="flex items-center space-x-2">
