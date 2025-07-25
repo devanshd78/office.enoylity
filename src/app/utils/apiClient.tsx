@@ -1,5 +1,5 @@
 // utils/apiClient.ts
-import axios from 'axios';
+import axios, { AxiosRequestConfig } from 'axios';
 
 const api = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_BASE_URL || '',
@@ -36,8 +36,12 @@ export const get = async <T = any>(
 
 export const postBlob = async (
   url: string,
-  data?: any
+  data?: any,
+  config: AxiosRequestConfig = {}           // ← NEW optional param
 ): Promise<Blob> => {
-  const response = await api.post(url, data, { responseType: 'blob' });
+  const response = await api.post(url, data, {
+    responseType: "blob",                  // default
+    ...config,                             // allow overrides (validateStatus, headers, etc.)
+  });
   return response.data;
 };
