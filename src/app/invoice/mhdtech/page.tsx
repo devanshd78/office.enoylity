@@ -1,11 +1,6 @@
 "use client";
 
-import React, {
-  FC,
-  useState,
-  useEffect,
-  useCallback,
-} from "react";
+import React, { FC, useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -31,7 +26,7 @@ interface Item {
 interface Invoice {
   id: string;
   invoice_number: string;
-  invoice_date: string;
+  invoice_date: string; // "30-05-2025" or "2025-05-30" or ISO
   due_date: string;
   bill_to: {
     name: string;
@@ -56,27 +51,66 @@ interface APIResponse {
 }
 
 /* ------------------------------------------------------------------
+ * Helpers
+ * ---------------------------------------------------------------- */
+const isDateField = (f: keyof Invoice) => f === "invoice_date" || f === "due_date";
+
+// Normalize "DD-MM-YYYY" | "YYYY-MM-DD" | ISO -> number key YYYYMMDD
+const dateKey = (s?: string): number => {
+  if (!s) return -Infinity;
+  const dmy = /^(\d{2})-(\d{2})-(\d{4})$/;      // 30-05-2025
+  const ymd = /^(\d{4})-(\d{2})-(\d{2})$/;      // 2025-05-30
+  let y: number, m: number, d: number;
+
+  if (dmy.test(s)) {
+    const [, dd, mm, yyyy] = s.match(dmy)!;
+    y = +yyyy; m = +mm; d = +dd;
+  } else if (ymd.test(s)) {
+    const [, yyyy, mm, dd] = s.match(ymd)!;
+    y = +yyyy; m = +mm; d = +dd;
+  } else {
+    const dt = new Date(s);
+    if (isNaN(dt.getTime())) return -Infinity;
+    y = dt.getUTCFullYear(); m = dt.getUTCMonth() + 1; d = dt.getUTCDate();
+  }
+  return y * 10000 + m * 100 + d;
+};
+
+// Map raw API invoice to our Invoice type
+const mapInvoice = (inv: any): Invoice => ({
+  id: inv._id,
+  invoice_number: inv.invoice_number,
+  invoice_date: inv.invoice_date,
+  due_date: inv.due_date,
+  bill_to: inv.bill_to,
+  items: inv.items,
+  payment_method: inv.payment_method,
+  total_amount: inv.total_amount,
+});
+
+/* ------------------------------------------------------------------
  * Component
  * ---------------------------------------------------------------- */
 const InvoiceHistoryPage: FC = () => {
   const router = useRouter();
 
-  /** ----------------------------------------------------------------
-   *  Local state
-   * ---------------------------------------------------------------*/
+  // table state
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [total, setTotal] = useState(0); // server‑reported total rows
-  const [loading, setLoading] = useState(true); // ⬅️ start in loading state to match SSR
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // query params
+  // controls
   const [search, setSearch] = useState("");
   const [sortField, setSortField] = useState<keyof Invoice>("invoice_date");
   const [sortAsc, setSortAsc] = useState(false);
   const [page, setPage] = useState(1);
   const per_page = 5;
 
-  // permissions – read **after** mount to prevent hydration mismatch
+  // when client-sorting dates, we keep a cached, fully-sorted list
+  const [allInvoices, setAllInvoices] = useState<Invoice[] | null>(null);
+
+  // permissions (read after mount)
   const [role, setRole] = useState<string | null>(null);
   const [permissions, setPermissions] = useState<Record<string, any>>({});
 
@@ -87,61 +121,126 @@ const InvoiceHistoryPage: FC = () => {
     setPermissions(permsRaw ? JSON.parse(permsRaw) : {});
   }, []);
 
-  const canViewInvoices = role === "admin" || permissions["View Invoice details"] === 1;
+  const canViewInvoices =
+    role === "admin" || permissions["View Invoice details"] === 1;
   const canGenerateInvoice =
     role === "admin" || permissions["Generate invoice details"] === 1;
 
-  /** ----------------------------------------------------------------
-   *  Fetch invoices – server‑side pagination
-   * ---------------------------------------------------------------*/
-  const fetchInvoices = useCallback(async () => {
-    setLoading(true);
-    setError("");
+  /* ------------------------------------------------------------------
+   * Fetch: server-side pagination (non-date sorts)
+   * ---------------------------------------------------------------- */
+  const fetchServerPaged = useCallback(
+    async () => {
+      setLoading(true);
+      setError("");
+      setAllInvoices(null); // not using client cache here
 
-    try {
-      const payload = {
-        search,
-        sortField,
-        sortAsc,
-        page,
-        per_page,
-      };
-      const result = await post<APIResponse>("/invoiceMHD/getlist", payload);
+      try {
+        const payload = { search, sortField, sortAsc, page, per_page };
+        const result = await post<APIResponse>("/invoiceMHD/getlist", payload);
+        if (!result.success) throw new Error(result.message || "Fetch failed");
 
-      if (!result.success) throw new Error(result.message || "Fetch failed");
+        const mapped: Invoice[] = (result.data.invoices || []).map(mapInvoice);
+        setInvoices(mapped);
+        setTotal(result.data.total);
+      } catch (err: any) {
+        console.error("Fetch error:", err);
+        setError(err?.message || "Failed to fetch invoices");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [search, sortField, sortAsc, page] // server sorts/paginates by these
+  );
 
-      /** Map API response → Invoice[] */
-      const mapped: Invoice[] = result.data.invoices.map((inv) => ({
-        id: inv._id,
-        invoice_number: inv.invoice_number,
-        invoice_date: inv.invoice_date,
-        due_date: inv.due_date,
-        bill_to: inv.bill_to,
-        items: inv.items,
-        payment_method: inv.payment_method,
-        total_amount: inv.total_amount,
-      }));
+  /* ------------------------------------------------------------------
+   * Fetch: get ALL pages (for date sorts) → sort client-side once
+   * ---------------------------------------------------------------- */
+  const fetchAllForDateSort = useCallback(
+    async () => {
+      setLoading(true);
+      setError("");
 
-      setInvoices(mapped);
-      setTotal(result.data.total);
-    } catch (err: any) {
-      console.error("Fetch error:", err);
-      setError(err?.message || "Failed to fetch invoices");
-    } finally {
-      setLoading(false);
-    }
-  }, [search, sortField, sortAsc, page]);
+      try {
+        const pageSize = 100; // batch size to reduce roundtrips
+        let current = 1;
+        let combined: Invoice[] = [];
+        let totalCount = 0;
 
-  /** Trigger fetch on dependency change */
+        // get first page to know total
+        // (don’t rely on server sort here; we sort client-side)
+        // still pass search so server filters
+        // NOTE: omit sortField/sortAsc to avoid any server-side date sort issues
+        // You can keep them; it won’t affect correctness.
+        // But omitting avoids surprises if server sorts oddly.
+        while (true) {
+          const res = await post<APIResponse>("/invoiceMHD/getlist", {
+            search,
+            page: current,
+            per_page: pageSize,
+          });
+
+          if (!res.success) throw new Error(res.message || "Fetch failed");
+
+          const batch = (res.data.invoices || []).map(mapInvoice);
+          combined = combined.concat(batch);
+          totalCount = res.data.total ?? combined.length;
+
+          if (batch.length === 0 || combined.length >= totalCount) break;
+          current++;
+        }
+
+        // sort once, across the entire dataset
+        const keyField = sortField === "due_date" ? "due_date" : "invoice_date";
+        combined.sort((a, b) => {
+          const ak = dateKey(a[keyField]);
+          const bk = dateKey(b[keyField]);
+          return sortAsc ? ak - bk : bk - ak;
+        });
+
+        setAllInvoices(combined);
+        setTotal(totalCount);
+
+        // slice for current page
+        const start = (page - 1) * per_page;
+        setInvoices(combined.slice(start, start + per_page));
+      } catch (err: any) {
+        console.error("Fetch error:", err);
+        setError(err?.message || "Failed to fetch invoices");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [search, sortField, sortAsc, page] // page is used for slicing initial view
+  );
+
+  /* ------------------------------------------------------------------
+   * Fetch chooser
+   *  - For date fields: fetch all then client-sort
+   *  - Else: server sort/pagination
+   * ---------------------------------------------------------------- */
   useEffect(() => {
-    fetchInvoices();
-  }, [fetchInvoices]);
+    if (isDateField(sortField)) {
+      // avoid refetching all on page-only changes
+      fetchAllForDateSort();
+    } else {
+      fetchServerPaged();
+    }
+  }, [search, sortField, sortAsc, fetchAllForDateSort, fetchServerPaged]);
 
-  /** ----------------------------------------------------------------
-   *  UX helpers
-   * ---------------------------------------------------------------*/
+  // When using client-sorted dataset, change page by slicing only (no refetch)
+  useEffect(() => {
+    if (!allInvoices) return;
+    const start = (page - 1) * per_page;
+    setInvoices(allInvoices.slice(start, start + per_page));
+  }, [page, per_page, allInvoices]);
+
+  /* ------------------------------------------------------------------
+   * UX helpers
+   * ---------------------------------------------------------------- */
   const [expandedRow, setExpandedRow] = useState<string | null>(null);
-  const toggleRow = (id: string) => setExpandedRow((prev) => (prev === id ? null : id));
+  const toggleRow = (id: string) =>
+    setExpandedRow((prev) => (prev === id ? null : id));
 
   const handleSort = (field: keyof Invoice) => {
     if (field === sortField) {
@@ -169,7 +268,9 @@ const InvoiceHistoryPage: FC = () => {
    * Actions
    * ---------------------------------------------------------------- */
   const handleCopyToGenerate = (invoice: Invoice) => {
-    router.push(`/invoice/mhdtech/generate?id=${encodeURIComponent(invoice.id)}`);
+    router.push(
+      `/invoice/mhdtech/generate?id=${encodeURIComponent(invoice.id)}`
+    );
   };
 
   /* ------------------------------------------------------------------
@@ -205,12 +306,14 @@ const InvoiceHistoryPage: FC = () => {
         {loading ? (
           <p className="py-4 text-center">Loading…</p>
         ) : !canViewInvoices ? (
-          <p className="py-4 text-center text-gray-600">You do not have permission to view invoices.</p>
+          <p className="py-4 text-center text-gray-600">
+            You do not have permission to view invoices.
+          </p>
         ) : invoices.length === 0 ? (
           <p className="py-4 text-center text-gray-600">No invoices found.</p>
         ) : (
           <>
-            {/* Mobile list (accordion style) */}
+            {/* Mobile list */}
             <div className="sm:hidden">
               {invoices.map((inv) => (
                 <div key={inv.id} className="mb-4 rounded-lg bg-white p-4 shadow">
@@ -226,7 +329,7 @@ const InvoiceHistoryPage: FC = () => {
                       <button
                         onClick={() => handleCopyToGenerate(inv)}
                         className="rounded bg-green-500 px-3 py-1 text-white hover:bg-green-600"
-                        title="Copy & Generate"
+                        title="Copy & Generate"
                       >
                         <FaEdit />
                       </button>
@@ -236,19 +339,23 @@ const InvoiceHistoryPage: FC = () => {
                   {expandedRow === inv.id && (
                     <div className="mt-3 space-y-2">
                       <p>
-                        <span className="font-medium">Client:</span> {inv.bill_to.name}
+                        <span className="font-medium">Client:</span>{" "}
+                        {inv.bill_to.name}
                       </p>
                       <p>
-                        <span className="font-medium">Email:</span> {inv.bill_to.email}
+                        <span className="font-medium">Email:</span>{" "}
+                        {inv.bill_to.email}
                       </p>
                       <p>
-                        <span className="font-medium">Total:</span> ${inv.total_amount.toFixed(2)}
+                        <span className="font-medium">Total:</span>{" "}
+                        ${inv.total_amount.toFixed(2)}
                       </p>
                       <p>
-                        <span className="font-medium">Due Date:</span> {inv.due_date}
+                        <span className="font-medium">Due Date:</span>{" "}
+                        {inv.due_date}
                       </p>
                       <p>
-                        <span className="font-medium">Payment Method:</span>{" "}
+                        <span className="font-medium">Payment Method:</span>{" "}
                         {inv.payment_method === 0 ? "PayPal" : "Bank Transfer"}
                       </p>
                       <p className="font-medium">Items:</p>
@@ -264,8 +371,12 @@ const InvoiceHistoryPage: FC = () => {
                           {inv.items.map((item, idx) => (
                             <tr key={idx} className="border-t">
                               <td className="px-2 py-1">{item.description}</td>
-                              <td className="px-2 py-1 text-center">{item.quantity}</td>
-                              <td className="px-2 py-1 text-right">${item.price.toFixed(2)}</td>
+                              <td className="px-2 py-1 text-center">
+                                {item.quantity}
+                              </td>
+                              <td className="px-2 py-1 text-right">
+                                ${item.price.toFixed(2)}
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -288,11 +399,7 @@ const InvoiceHistoryPage: FC = () => {
                       <span className="flex items-center">
                         Invoice #
                         {sortField === "invoice_number" ? (
-                          sortAsc ? (
-                            <FaSortUp className="ml-1" />
-                          ) : (
-                            <FaSortDown className="ml-1" />
-                          )
+                          sortAsc ? <FaSortUp className="ml-1" /> : <FaSortDown className="ml-1" />
                         ) : (
                           <FaSort className="ml-1 text-gray-400" />
                         )}
@@ -305,12 +412,7 @@ const InvoiceHistoryPage: FC = () => {
                       <span className="flex items-center">
                         Date
                         {sortField === "invoice_date" ? (
-
-                          sortAsc ? (
-                            <FaSortUp className="ml-1" />
-                          ) : (
-                            <FaSortDown className="ml-1" />
-                          )
+                          sortAsc ? <FaSortUp className="ml-1" /> : <FaSortDown className="ml-1" />
                         ) : (
                           <FaSort className="ml-1 text-gray-400" />
                         )}
@@ -326,10 +428,18 @@ const InvoiceHistoryPage: FC = () => {
                   {invoices.map((inv) => (
                     <React.Fragment key={inv.id}>
                       <tr className="border-t hover:bg-gray-50">
-                        <td className="whitespace-nowrap px-3 py-2">{inv.invoice_number}</td>
-                        <td className="whitespace-nowrap px-3 py-2">{inv.invoice_date}</td>
-                        <td className="whitespace-nowrap px-3 py-2">{inv.bill_to.name}</td>
-                        <td className="whitespace-nowrap px-3 py-2">${inv.total_amount.toFixed(2)}</td>
+                        <td className="whitespace-nowrap px-3 py-2">
+                          {inv.invoice_number}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2">
+                          {inv.invoice_date}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2">
+                          {inv.bill_to.name}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-2">
+                          ${inv.total_amount.toFixed(2)}
+                        </td>
                         <td className="whitespace-nowrap px-3 py-2">
                           {inv.payment_method === 0 ? "PayPal" : "Bank Transfer"}
                         </td>
@@ -343,7 +453,7 @@ const InvoiceHistoryPage: FC = () => {
                           </button>
                           <button
                             onClick={() => handleCopyToGenerate(inv)}
-                            title="Copy & Generate"
+                            title="Copy & Generate"
                             className="text-green-600 hover:underline"
                           >
                             <FaEdit />
@@ -367,7 +477,9 @@ const InvoiceHistoryPage: FC = () => {
                                     <tr key={idx} className="border-t">
                                       <td className="px-2 py-1">{item.description}</td>
                                       <td className="px-2 py-1 text-center">{item.quantity}</td>
-                                      <td className="px-2 py-1 text-right">${item.price.toFixed(2)}</td>
+                                      <td className="px-2 py-1 text-right">
+                                        ${item.price.toFixed(2)}
+                                      </td>
                                     </tr>
                                   ))}
                                 </tbody>
