@@ -1,12 +1,6 @@
 "use client";
 
-import React, {
-  FC,
-  useState,
-  useCallback,
-  useMemo,
-  useEffect,
-} from "react";
+import React, { FC, useState, useCallback, useMemo, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Swal from "sweetalert2";
@@ -18,18 +12,75 @@ interface Item {
   price: number;
 }
 
-/**
- * GenerateInvoicePage – create / edit invoices for MHD Tech
- *
- * 🚀 2025‑07‑25 — Error‑handling refresh
- * ------------------------------------------------------------
- * • Preserves previous improvements (handles success:false, parses
- *   JSON error blobs, etc.)
- * • Adds Axios‑error path parsing so we surface server‑side
- *   `message` even when the request is rejected (HTTP 4xx).
- * • Brings back `validateStatus` flag so error payloads arrive as
- *   blobs we can inspect before Axios throws.
- */
+type ApiEnvelope<T> = {
+  data: T;
+  success: boolean;
+  message: string;
+  status?: number;
+};
+
+type ApiItem = { description: string; price: number; quantity: number };
+type ApiInvoice = {
+  _id: string;
+  bill_to?: { address?: string; email?: string; name?: string; phone?: string };
+  createdAt?: string | null;
+  due_date?: string | null;
+  invoice_date?: string | null;
+  invoice_number?: string;
+  items?: ApiItem[];
+  notes?: string;
+  payment_method?: number;           // 0 PayPal, 1 Bank Transfer
+  bank_note?: string;
+  bank_Note?: string;
+  total_amount?: number | null;
+};
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+// Parse "DD-MM-YYYY" | "YYYY-MM-DD" | ISO → "YYYY-MM-DD" or ""
+const toInputDate = (raw?: string | null): string => {
+  if (!raw) return "";
+  const dmy = /^(\d{2})-(\d{2})-(\d{4})$/;
+  const ymd = /^(\d{4})-(\d{2})-(\d{2})$/;
+  if (dmy.test(raw)) {
+    const [, dd, mm, yyyy] = raw.match(dmy)!;
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  if (ymd.test(raw)) {
+    const [, yyyy, mm, dd] = raw.match(ymd)!;
+    return `${yyyy}-${mm}-${dd}`;
+  }
+  const dt = new Date(raw);
+  if (isNaN(dt.getTime())) return "";
+  return `${dt.getUTCFullYear()}-${pad2(dt.getUTCMonth() + 1)}-${pad2(dt.getUTCDate())}`;
+};
+
+// Format "YYYY-MM-DD" → "DD-MM-YYYY"
+const toDdMmYyyy = (yyyyMmDd: string): string => {
+  if (!yyyyMmDd) return "";
+  const [y, m, d] = yyyyMmDd.split("-");
+  if (!y || !m || !d) return "";
+  return `${d}-${m}-${y}`;
+};
+
+const mapPaymentCodeToLabel = (code?: number) =>
+  ({ 0: "PayPal", 1: "Bank Transfer" } as const)[Number(code) as 0 | 1] ?? "";
+
+const mapPaymentLabelToCode = (label: "" | "PayPal" | "Bank Transfer") =>
+  label === "PayPal" ? 0 : label === "Bank Transfer" ? 1 : 0;
+
+const guessCityFromAddress = (address?: string): string => {
+  if (!address) return "";
+  const parts = address.split(",").map(s => s.trim()).filter(Boolean);
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const p = parts[i];
+    if (/\d/.test(p)) continue;
+    if (/^[A-Z]{2,3}$/.test(p)) continue;
+    return p;
+  }
+  return "";
+};
+
 const GenerateInvoicePage: FC = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -42,109 +93,97 @@ const GenerateInvoicePage: FC = () => {
   const [clientCity, setClientCity] = useState("");
   const [clientEmail, setClientEmail] = useState("");
   const [clientPhone, setClientPhone] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState<
-    "" | "PayPal" | "Bank Transfer"
-  >("");
-  const [items, setItems] = useState<Item[]>([
-    { description: "", quantity: 1, price: 0 },
-  ]);
-  const [notes, setNotes] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState<"" | "PayPal" | "Bank Transfer">("");
   const [bankNote, setBankNote] = useState("");
+  const [items, setItems] = useState<Item[]>([{ description: "", quantity: 1, price: 0 }]);
+  const [notes, setNotes] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-
-  /* ------------------------------------------------------------------
-   * Helpers
-   * ---------------------------------------------------------------- */
-  const convertToInputDate = (dateStr: string) => {
-    const [day, month, year] = dateStr.split("-");
-    return `${year}-${month}-${day}`;
-  };
 
   const showApiError = async (message: string) => {
     await Swal.fire({ icon: "error", title: "Error", text: message });
   };
 
-  /* ------------------------------------------------------------------
-   *  Fetch existing invoice (edit‑mode)
-   * ---------------------------------------------------------------- */
+  // Fetch existing invoice (edit-mode)
   useEffect(() => {
     if (!invoiceId) return;
+    let alive = true;
 
     (async () => {
       try {
-        const res = await post("/invoiceMHD/getinvoice", { id: invoiceId });
+        // post<T> returns response.data, i.e. the envelope directly
+        const envelope = await post<ApiEnvelope<ApiInvoice>>("/invoiceMHD/getinvoice", { id: invoiceId });
+        const { success, message, data } = envelope;
 
-        if (!res.data?.success) {
-          throw new Error(res.data?.message || "Failed to fetch invoice");
+        if (!success || !data) {
+          throw new Error(message || "Failed to fetch invoice");
         }
+        if (!alive) return;
 
-        const data = res.data.data;
-        setBillDate(convertToInputDate(data.invoice_date));
-        setDueDate(convertToInputDate(data.due_date));
-        setClientName(data.bill_to?.name || "");
-        setClientAddress(data.bill_to?.address || "");
-        setClientCity("");
-        setClientEmail(data.bill_to?.email || "");
-        setClientPhone(data.bill_to?.phone || "");
-        setPaymentMethod(data.payment_method === 0 ? "PayPal" : "Bank Transfer");
-        setItems(data.items || []);
-        setNotes(data.notes || "");
+        // Dates
+        setBillDate(toInputDate(data.invoice_date));
+        setDueDate(toInputDate(data.due_date));
+
+        // Bill to
+        const bill = data.bill_to ?? {};
+        setClientName(bill.name ?? "");
+        setClientAddress(bill.address ?? "");
+        setClientCity(guessCityFromAddress(bill.address) || "");
+        setClientEmail(bill.email ?? "");
+        setClientPhone(bill.phone ?? "");
+
+        // Payment + bank note
+        setPaymentMethod(mapPaymentCodeToLabel(data.payment_method));
+        setBankNote((data.bank_note ?? data.bank_Note ?? "").toString());
+
+        // Items
+        const its = Array.isArray(data.items) ? data.items : [];
+        setItems(
+          its.map((it: ApiItem) => ({
+            description: it.description ?? "",
+            quantity: Number(it.quantity ?? 0),
+            price: Number(it.price ?? 0),
+          }))
+        );
+
+        setNotes(data.notes ?? "");
       } catch (error: any) {
         console.error("Error fetching invoice data:", error);
-        showApiError(error.message || "Unable to fetch invoice data.");
+        await showApiError(error?.message || "Unable to fetch invoice data.");
       }
     })();
+
+    return () => {
+      alive = false;
+    };
   }, [invoiceId]);
 
-  /* ------------------------------------------------------------------
-   *  Dynamic form utilities
-   * ---------------------------------------------------------------- */
+  // Dynamic form utilities
   const handleAddItem = useCallback(() => {
-    setItems((prev) => [...prev, { description: "", quantity: 1, price: 0 }]);
+    setItems(prev => [...prev, { description: "", quantity: 1, price: 0 }]);
   }, []);
 
   const handleRemoveItem = useCallback((index: number) => {
-    setItems((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev));
+    setItems(prev => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev));
   }, []);
 
-  const handleItemChange = useCallback(
-    (index: number, field: keyof Item, value: string | number) => {
-      setItems((prev) =>
-        prev.map((it, i) =>
-          i === index ? { ...it, [field]: field === "description" ? value : Number(value) } : it
-        )
-      );
-    },
-    []
-  );
+  const handleItemChange = useCallback((index: number, field: keyof Item, value: string | number) => {
+    setItems(prev =>
+      prev.map((it, i) =>
+        i === index ? { ...it, [field]: field === "description" ? (value as string) : Number(value) } : it
+      )
+    );
+  }, []);
 
-  /* ------------------------------------------------------------------
-   *  Computed state
-   * ---------------------------------------------------------------- */
-  const formattedBillDate = useMemo(() => {
-    if (!billDate) return "";
-    const d = new Date(billDate);
-    return `${d.getDate().toString().padStart(2, "0")}-${(d.getMonth() + 1)
-      .toString()
-      .padStart(2, "0")}-${d.getFullYear()}`;
-  }, [billDate]);
-
-  const formattedDueDate = useMemo(() => {
-    if (!dueDate) return "";
-    const d = new Date(dueDate);
-    return `${d.getDate().toString().padStart(2, "0")}-${(d.getMonth() + 1)
-      .toString()
-      .padStart(2, "0")}-${d.getFullYear()}`;
-  }, [dueDate]);
+  // Computed state (format to server’s expected DD-MM-YYYY)
+  const formattedBillDate = useMemo(() => toDdMmYyyy(billDate), [billDate]);
+  const formattedDueDate = useMemo(() => toDdMmYyyy(dueDate), [dueDate]);
 
   const isValid = useMemo(
-    () => billDate && dueDate && clientName && clientAddress && items.length > 0,
+    () => Boolean(billDate && dueDate && clientName && clientAddress && items.length > 0),
     [billDate, dueDate, clientName, clientAddress, items]
   );
 
-  /* ------------------------------------------------------------------
-   *  Submit → Generate PDF
-   * ---------------------------------------------------------------- */
+  // Submit → Generate PDF
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isValid) {
@@ -158,9 +197,9 @@ const GenerateInvoicePage: FC = () => {
       bill_to_city: clientCity,
       bill_to_email: clientEmail,
       bill_to_phone: clientPhone,
-      invoice_date: formattedBillDate,
-      due_date: formattedDueDate,
-      payment_method: paymentMethod === "PayPal" ? 0 : paymentMethod === "Bank Transfer" ? 1 : 2,
+      invoice_date: formattedBillDate, // DD-MM-YYYY
+      due_date: formattedDueDate,     // DD-MM-YYYY
+      payment_method: mapPaymentLabelToCode(paymentMethod),
       bank_Note: paymentMethod === "Bank Transfer" ? bankNote : "",
       items,
       notes,
@@ -168,15 +207,12 @@ const GenerateInvoicePage: FC = () => {
 
     setIsLoading(true);
     try {
-      /**
-       * Always allow non‑2xx so we can inspect the blob ourselves.
-       */
       const blob = await postBlob("/invoiceMHD/generate-invoice", payload, {
         validateStatus: () => true,
         responseType: "blob",
       });
 
-      if (blob.type === "application/pdf") {
+      if (blob && typeof blob.type === "string" && blob.type.toLowerCase().includes("pdf")) {
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement("a");
         link.href = url;
@@ -185,7 +221,13 @@ const GenerateInvoicePage: FC = () => {
         link.click();
         link.remove();
 
-        await Swal.fire({ icon: "success", title: "Invoice Generated", text: "Your PDF has been downloaded.", timer: 1500, showConfirmButton: false });
+        await Swal.fire({
+          icon: "success",
+          title: "Invoice Generated",
+          text: "Your PDF has been downloaded.",
+          timer: 1500,
+          showConfirmButton: false,
+        });
         router.push("/invoice/mhdtech");
         return;
       }
@@ -203,16 +245,15 @@ const GenerateInvoicePage: FC = () => {
       console.error(err);
       let msg = err?.message || "Error generating invoice.";
 
-      // AxiosError path: response.data may be Blob
       if (err?.response?.data instanceof Blob) {
         try {
           const t = await err.response.data.text();
           const j = JSON.parse(t);
           msg = j.message || msg;
-        } catch {/* ignore parse errors */}
+        } catch {/* ignore */}
       }
 
-      showApiError(msg);
+      await showApiError(msg);
     } finally {
       setIsLoading(false);
     }
@@ -222,9 +263,6 @@ const GenerateInvoicePage: FC = () => {
     if (e.key === "Enter") e.preventDefault();
   };
 
-  /* ------------------------------------------------------------------
-   *  JSX
-   * ---------------------------------------------------------------- */
   return (
     <div className="min-h-screen bg-indigo-100 p-4">
       <div className="mx-auto mb-12 max-w-3xl rounded-lg bg-white p-6 shadow">
@@ -249,8 +287,7 @@ const GenerateInvoicePage: FC = () => {
                 type="date"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
-                className="mt-1 rounded
--lg border px-3 py-2"
+                className="mt-1 rounded-lg border px-3 py-2"
               />
             </label>
           </div>
@@ -259,36 +296,11 @@ const GenerateInvoicePage: FC = () => {
           <div className="space-y-2">
             <h2 className="font-bold">Client Information</h2>
             {[
-              {
-                label: "Name",
-                value: clientName,
-                setter: setClientName,
-                type: "text",
-              },
-              {
-                label: "Address",
-                value: clientAddress,
-                setter: setClientAddress,
-                type: "text",
-              },
-              {
-                label: "City",
-                value: clientCity,
-                setter: setClientCity,
-                type: "text",
-              },
-              {
-                label: "Email",
-                value: clientEmail,
-                setter: setClientEmail,
-                type: "email",
-              },
-              {
-                label: "Phone",
-                value: clientPhone,
-                setter: setClientPhone,
-                type: "tel",
-              },
+              { label: "Name", value: clientName, setter: setClientName, type: "text" },
+              { label: "Address", value: clientAddress, setter: setClientAddress, type: "text" },
+              { label: "City", value: clientCity, setter: setClientCity, type: "text" },
+              { label: "Email", value: clientEmail, setter: setClientEmail, type: "email" },
+              { label: "Phone", value: clientPhone, setter: setClientPhone, type: "tel" },
             ].map(({ label, value, setter, type }) => (
               <label key={label} className="flex flex-col">
                 <span>{label}</span>
@@ -310,9 +322,7 @@ const GenerateInvoicePage: FC = () => {
               onChange={(e) => setPaymentMethod(e.target.value as any)}
               className="mt-1 rounded-lg border px-3 py-2"
             >
-              <option value="" disabled>
-                Select Payment Method
-              </option>
+              <option value="" disabled>Select Payment Method</option>
               <option value="PayPal">PayPal</option>
               <option value="Bank Transfer">Bank Transfer</option>
             </select>
@@ -335,21 +345,17 @@ const GenerateInvoicePage: FC = () => {
           <div className="space-y-2">
             <h2 className="font-medium">Items</h2>
             {items.map((it, idx) => (
-              <div
-                key={idx}
-                className="grid grid-cols-1 items-end gap-2 sm:grid-cols-3"
-              >
+              <div key={idx} className="grid grid-cols-1 items-end gap-2 sm:grid-cols-3">
                 <label className="flex flex-col sm:col-span-2">
                   <span>Description</span>
                   <input
                     type="text"
                     value={it.description}
-                    onChange={(e) =>
-                      handleItemChange(idx, "description", e.target.value)
-                    }
+                    onChange={(e) => handleItemChange(idx, "description", e.target.value)}
                     className="mt-1 rounded-lg border px-3 py-2"
                   />
                 </label>
+
                 {items.length > 1 && (
                   <button
                     type="button"
@@ -359,18 +365,18 @@ const GenerateInvoicePage: FC = () => {
                     Remove
                   </button>
                 )}
+
                 <label className="flex flex-col">
                   <span>Qty</span>
                   <input
                     type="number"
                     min={1}
                     value={it.quantity}
-                    onChange={(e) =>
-                      handleItemChange(idx, "quantity", Number(e.target.value))
-                    }
+                    onChange={(e) => handleItemChange(idx, "quantity", Number(e.target.value))}
                     className="mt-1 rounded-lg border px-3 py-2"
                   />
                 </label>
+
                 <label className="flex flex-col">
                   <span>Price</span>
                   <div className="mt-1 flex overflow-hidden rounded-lg border">
@@ -380,9 +386,7 @@ const GenerateInvoicePage: FC = () => {
                       min={0}
                       step={0.01}
                       value={it.price === 0 ? "" : it.price}
-                      onChange={(e) =>
-                        handleItemChange(idx, "price", Number(e.target.value))
-                      }
+                      onChange={(e) => handleItemChange(idx, "price", Number(e.target.value))}
                       className="flex-1 px-3 py-2 outline-none"
                     />
                   </div>
@@ -418,9 +422,7 @@ const GenerateInvoicePage: FC = () => {
               type="submit"
               disabled={!isValid || isLoading}
               className={`rounded-lg px-4 py-2 text-white ${
-                isValid && !isLoading
-                  ? "bg-indigo-600 hover:bg-indigo-700"
-                  : "cursor-not-allowed bg-gray-400"
+                isValid && !isLoading ? "bg-indigo-600 hover:bg-indigo-700" : "cursor-not-allowed bg-gray-400"
               }`}
             >
               {isLoading ? "Generating…" : "Generate"}
