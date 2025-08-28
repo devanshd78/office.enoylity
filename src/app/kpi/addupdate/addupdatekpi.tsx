@@ -254,7 +254,6 @@ const AddUpdateKpiPage: FC = () => {
             <label className="block text-sm font-medium mb-1">Remark</label>
             <textarea
               name="remark"
-              required
               value={input.remark}
               onChange={handleChange}
               rows={3}

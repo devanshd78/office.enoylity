@@ -13,7 +13,8 @@ const permissionsList = [
   'Generate invoice details',
   'Add Employee Details',
   'View Employee Details',
-  'Manage KPI',
+  "KPI",
+  'Manage KPI'
 ];
 
 interface Employee {
