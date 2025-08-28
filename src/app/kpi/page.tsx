@@ -169,7 +169,8 @@ const KpisPage: FC = () => {
   const [sortField, setSortField] = useState<keyof KpiItem>("startdate");
   const [sortAsc, setSortAsc] = useState(true);
   const [page, setPage] = useState(1);
-  const perPage = 10;
+  const [perPage, setPerPage] = useState<number>(10);
+
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
@@ -340,7 +341,7 @@ const KpisPage: FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [search, startDate, endDate, page, sortField, sortAsc, role, selectedEmployeeIds, canManageKpi]);
+  }, [search, startDate, endDate, page, sortField, sortAsc, role, selectedEmployeeIds, canManageKpi, perPage]);
 
   useEffect(() => {
     if (canView) fetchData();
@@ -510,6 +511,24 @@ const KpisPage: FC = () => {
               <FaPlus className="mr-2" /> Add KPI
             </button>
           )}
+
+          <select
+            value={perPage}
+            onChange={(e) => {
+              setPerPage(Number(e.target.value));
+              setPage(1);
+            }}
+            className="px-3 py-2 border rounded"
+            aria-label="Rows per page"
+          >
+            {[10, 20, 50, 100].map((n) => (
+              <option key={n} value={n}>
+                {n} / page
+              </option>
+            ))}
+          </select>
+
+
         </div>
 
         {loading ? (
