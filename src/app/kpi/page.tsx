@@ -10,9 +10,9 @@ import {
   FaEdit,
   FaTrash,
 } from "react-icons/fa";
-import { ChevronsUpDown, Check } from "lucide-react";
+import { ChevronsUpDown, Check, X } from "lucide-react";
 import Swal from "sweetalert2";
-import { post } from "../utils/apiClient";
+import { post, postBlob } from "../utils/apiClient";
 
 // shadcn/ui
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,16 @@ import {
 } from "@/components/ui/command";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 export interface KpiItem {
   kpiId: string;
@@ -161,6 +171,8 @@ const MultiSelect: FC<MultiSelectProps> = ({
   );
 };
 
+type ExportScope = "all" | "selected" | "mine";
+
 const KpisPage: FC = () => {
   const router = useRouter();
   const [search, setSearch] = useState("");
@@ -214,6 +226,15 @@ const KpisPage: FC = () => {
 
   const [data, setData] = useState<KpiItem[]>([]);
   const [totalPages, setTotalPages] = useState(1);
+
+  // ===== CSV Export (modal) state =====
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportScope, setExportScope] = useState<ExportScope>("all");
+  const [exporting, setExporting] = useState(false);
+
+  useEffect(() => {
+    setExportScope(canManageKpi ? "all" : "mine");
+  }, [canManageKpi]);
 
   const fetchEmployees = useCallback(async () => {
     try {
@@ -441,6 +462,77 @@ const KpisPage: FC = () => {
     }
   };
 
+  // ===== Export CSV logic (manager-only, send only employeeId) =====
+  const handleExportCsv = useCallback(async () => {
+    try {
+      setExporting(true);
+
+      // Manager-only guard
+      if (!canManageKpi) {
+        Swal.fire("Permission denied", "Only managers can export CSV.", "error");
+        return;
+      }
+
+      // Resolve which IDs to export
+      let ids: string[] = [];
+      if (exportScope === "selected") {
+        if (!selectedEmployeeIds.length) {
+          Swal.fire("Select employees", "Please choose at least one employee.", "info");
+          return;
+        }
+        ids = selectedEmployeeIds;
+      } else {
+        // exportScope === "all" → include all known employees
+        if (!employees.length) {
+          Swal.fire("No employees", "Employees list is empty; cannot export.", "error");
+          return;
+        }
+        ids = employees.map((e) => e.employeeId);
+      }
+
+      // Backend expects employeeId: string | string[]
+      const payload: { employeeId: string | string[] } = {
+        employeeId: ids.length === 1 ? ids[0] : ids,
+      };
+
+      // Axios blob download
+      const blob = await postBlob("/kpi/exportCsv", payload, {
+        headers: { "Content-Type": "application/json" },
+        validateStatus: (s) => s >= 200 && s < 300,
+      });
+
+      // Trigger browser download
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const dateStr = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+      a.download = `kpis-${exportScope}-${dateStr}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+
+      setExportOpen(false);
+      Swal.fire("Exported", "Your CSV download has started.", "success");
+    } catch (e: any) {
+      // Axios error → try to read server's blob/text message if present
+      let message = e?.message || "Failed to export CSV";
+      const maybeBlob = e?.response?.data;
+      if (maybeBlob instanceof Blob) {
+        try {
+          const text = await maybeBlob.text();
+          message = text || message;
+        } catch {
+          /* ignore */
+        }
+      }
+      console.error(e);
+      Swal.fire("Error", message, "error");
+    } finally {
+      setExporting(false);
+    }
+  }, [canManageKpi, exportScope, selectedEmployeeIds, employees]);
+
   const employeeOptions: MultiSelectOption[] = useMemo(
     () =>
       employees.map((emp) => ({
@@ -449,6 +541,14 @@ const KpisPage: FC = () => {
       })),
     [employees]
   );
+
+  const selectedEmployees = useMemo<Employee[]>(() => {
+    if (!selectedEmployeeIds.length) return [];
+    const index = new Map(employees.map((e) => [e.employeeId, e] as const));
+    return selectedEmployeeIds
+      .map((id) => index.get(id))
+      .filter((e): e is Employee => Boolean(e));
+  }, [employees, selectedEmployeeIds]);
 
   const getSerial = (index: number) => (page - 1) * perPage + index + 1;
 
@@ -528,8 +628,127 @@ const KpisPage: FC = () => {
             ))}
           </select>
 
-
+          {/* Export CSV button (manager-only) */}
+          {canManageKpi && (
+            <Button
+              variant="outline"
+              onClick={() => setExportOpen(true)}
+              className="whitespace-nowrap"
+            >
+              Export CSV
+            </Button>
+          )}
         </div>
+
+        {/* Export Modal */}
+        <Dialog open={exportOpen} onOpenChange={setExportOpen}>
+          <DialogContent className="sm:max-w-[560px]">
+            <DialogHeader>
+              <DialogTitle>Export KPI CSV</DialogTitle>
+              <DialogDescription>
+                Download a CSV of KPIs. Choose the scope (full or selected employees).
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-6">
+              {canManageKpi ? (
+                <div className="space-y-2">
+                  <Label className="text-sm">Scope</Label>
+                  <RadioGroup
+                    value={exportScope}
+                    onValueChange={(v) => setExportScope(v as ExportScope)}
+                    className="grid grid-cols-1 gap-3"
+                  >
+                    <div className="flex items-center space-x-2 rounded-md border p-3">
+                      <RadioGroupItem value="all" id="scope-all" />
+                      <Label htmlFor="scope-all" className="flex-1 cursor-pointer">
+                        Full data (all employees)
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2 rounded-md border p-3">
+                      <RadioGroupItem value="selected" id="scope-selected" />
+                      <Label htmlFor="scope-selected" className="flex-1 cursor-pointer">
+                        Only selected employees {selectedEmployeeIds.length ? `(${selectedEmployeeIds.length})` : ""}
+                      </Label>
+                    </div>
+                  </RadioGroup>
+
+                  {/* Picker + Selected employees list */}
+                  {exportScope === "selected" && (
+                    <div className="space-y-2">
+                      <Label className="text-sm">Choose employees</Label>
+                      <MultiSelect
+                        options={employeeOptions}
+                        values={selectedEmployeeIds}
+                        onChange={setSelectedEmployeeIds}
+                        placeholder="Search & select employees"
+                        buttonClassName="w-full"
+                      />
+
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm">Selected employees ({selectedEmployees.length})</Label>
+                        {selectedEmployeeIds.length > 0 && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7"
+                            onClick={() => setSelectedEmployeeIds([])}
+                          >
+                            Clear all
+                          </Button>
+                        )}
+                      </div>
+
+                      {selectedEmployees.length ? (
+                        <ScrollArea className="max-h-40 rounded-md border p-2">
+                          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {selectedEmployees.map((e) => (
+                              <li key={e.employeeId} className="flex items-center justify-between rounded-md border px-3 py-2">
+                                <span className="truncate pr-2">{e.employeeName} ({e.employeeId})</span>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 px-2"
+                                  onClick={() => setSelectedEmployeeIds((prev) => prev.filter((id) => id !== e.employeeId))}
+                                  aria-label={`Remove ${e.employeeName}`}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </li>
+                            ))}
+                          </ul>
+                        </ScrollArea>
+                      ) : (
+                        <p className="text-xs text-gray-500 italic">No employees selected.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-md border p-3 bg-gray-50">
+                  <p className="text-sm"><strong>Scope:</strong> Your KPIs</p>
+                  <p className="text-xs text-gray-600">You can export only your own KPIs.</p>
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="mt-4">
+              <Button variant="outline" onClick={() => setExportOpen(false)} disabled={exporting}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleExportCsv}
+                disabled={
+                  exporting ||
+                  !canManageKpi ||
+                  (exportScope === "selected" && selectedEmployeeIds.length === 0)
+                }
+              >
+                {exporting ? "Exporting..." : "Download CSV"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {loading ? (
           <div className="text-center py-4">Loading...</div>
@@ -794,8 +1013,7 @@ const KpisPage: FC = () => {
                 <button
                   key={i}
                   onClick={() => setPage(i + 1)}
-                  className={`px-3 py-1 border rounded ${page === i + 1 ? "bg-indigo-200" : ""
-                    }`}
+                  className={`px-3 py-1 border rounded ${page === i + 1 ? "bg-indigo-200" : ""}`}
                 >
                   {i + 1}
                 </button>
