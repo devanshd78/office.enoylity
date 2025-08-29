@@ -414,8 +414,6 @@ const handlePunch = async (kpiId: string) => {
           <p>${res?.message || "Punch recorded successfully"}</p>
           ${d.punchDate ? `<p><strong>Date:</strong> ${d.punchDate}</p>` : ""}
           ${d.status ? `<p><strong>Status:</strong> ${d.status}</p>` : ""}
-          ${typeof d.pointChange === "number" ? <p><strong>Point Change:</strong> ${d.pointChange}</p> : ""}
-          ${typeof d.points === "number" ? <p><strong>Total Points:</strong> ${d.points}</p> : ""}
         `,
         icon: "success",
       });
