@@ -634,123 +634,13 @@ const handleExportCsv = useCallback(async () => {
           {canManageKpi && (
             <Button
               variant="outline"
-              onClick={() => setExportOpen(true)}
+              onClick={handleExportCsv}
               className="whitespace-nowrap"
             >
               Export CSV
             </Button>
           )}
         </div>
-
-        {/* Export Modal */}
-        <Dialog open={exportOpen} onOpenChange={setExportOpen}>
-          <DialogContent className="sm:max-w-[560px]">
-            <DialogHeader>
-              <DialogTitle>Export KPI CSV</DialogTitle>
-              <DialogDescription>
-                Download a CSV of KPIs. Choose the scope (full or selected employees).
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-6">
-              {canManageKpi ? (
-                <div className="space-y-2">
-                  <Label className="text-sm">Scope</Label>
-                  <RadioGroup
-                    value={exportScope}
-                    onValueChange={(v) => setExportScope(v as ExportScope)}
-                    className="grid grid-cols-1 gap-3"
-                  >
-                    <div className="flex items-center space-x-2 rounded-md border p-3">
-                      <RadioGroupItem value="all" id="scope-all" />
-                      <Label htmlFor="scope-all" className="flex-1 cursor-pointer">
-                        Full data (all employees)
-                      </Label>
-                    </div>
-                    <div className="flex items-center space-x-2 rounded-md border p-3">
-                      <RadioGroupItem value="selected" id="scope-selected" />
-                      <Label htmlFor="scope-selected" className="flex-1 cursor-pointer">
-                        Only selected employees {selectedEmployeeIds.length ? `(${selectedEmployeeIds.length})` : ""}
-                      </Label>
-                    </div>
-                  </RadioGroup>
-
-                  {/* Picker + Selected employees list */}
-                  {exportScope === "selected" && (
-                    <div className="space-y-2">
-                      <Label className="text-sm">Choose employees</Label>
-                      <MultiSelect
-                        options={employeeOptions}
-                        values={selectedEmployeeIds}
-                        onChange={setSelectedEmployeeIds}
-                        placeholder="Search & select employees"
-                        buttonClassName="w-full"
-                      />
-
-                      <div className="flex items-center justify-between">
-                        <Label className="text-sm">Selected employees ({selectedEmployees.length})</Label>
-                        {selectedEmployeeIds.length > 0 && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7"
-                            onClick={() => setSelectedEmployeeIds([])}
-                          >
-                            Clear all
-                          </Button>
-                        )}
-                      </div>
-
-                      {selectedEmployees.length ? (
-                        <ScrollArea className="max-h-40 rounded-md border p-2">
-                          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            {selectedEmployees.map((e) => (
-                              <li key={e.employeeId} className="flex items-center justify-between rounded-md border px-3 py-2">
-                                <span className="truncate pr-2">{e.employeeName} ({e.employeeId})</span>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-7 px-2"
-                                  onClick={() => setSelectedEmployeeIds((prev) => prev.filter((id) => id !== e.employeeId))}
-                                  aria-label={`Remove ${e.employeeName}`}
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              </li>
-                            ))}
-                          </ul>
-                        </ScrollArea>
-                      ) : (
-                        <p className="text-xs text-gray-500 italic">No employees selected.</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="rounded-md border p-3 bg-gray-50">
-                  <p className="text-sm"><strong>Scope:</strong> Your KPIs</p>
-                  <p className="text-xs text-gray-600">You can export only your own KPIs.</p>
-                </div>
-              )}
-            </div>
-
-            <DialogFooter className="mt-4">
-              <Button variant="outline" onClick={() => setExportOpen(false)} disabled={exporting}>
-                Cancel
-              </Button>
-              <Button
-                onClick={handleExportCsv}
-                disabled={
-                  exporting ||
-                  !canManageKpi ||
-                  (exportScope === "selected" && selectedEmployeeIds.length === 0)
-                }
-              >
-                {exporting ? "Exporting..." : "Download CSV"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
 
         {loading ? (
           <div className="text-center py-4">Loading...</div>
