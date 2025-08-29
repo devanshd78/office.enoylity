@@ -463,75 +463,77 @@ const KpisPage: FC = () => {
   };
 
   // ===== Export CSV logic (manager-only, send only employeeId) =====
-  const handleExportCsv = useCallback(async () => {
-    try {
-      setExporting(true);
+const handleExportCsv = useCallback(async () => {
+  try {
+    setExporting(true);
 
-      // Manager-only guard
-      if (!canManageKpi) {
-        Swal.fire("Permission denied", "Only managers can export CSV.", "error");
+    if (!canManageKpi) {
+      Swal.fire("Permission denied", "Only managers can export CSV.", "error");
+      return;
+    }
+
+    // Resolve employeeIds
+    let ids: string[] = [];
+    if (exportScope === "selected") {
+      if (!selectedEmployeeIds.length) {
+        Swal.fire("Select employees", "Please choose at least one employee.", "info");
         return;
       }
-
-      // Resolve which IDs to export
-      let ids: string[] = [];
-      if (exportScope === "selected") {
-        if (!selectedEmployeeIds.length) {
-          Swal.fire("Select employees", "Please choose at least one employee.", "info");
-          return;
-        }
-        ids = selectedEmployeeIds;
-      } else {
-        // exportScope === "all" → include all known employees
-        if (!employees.length) {
-          Swal.fire("No employees", "Employees list is empty; cannot export.", "error");
-          return;
-        }
-        ids = employees.map((e) => e.employeeId);
+      ids = selectedEmployeeIds;
+    } else {
+      if (!employees.length) {
+        Swal.fire("No employees", "Employees list is empty; cannot export.", "error");
+        return;
       }
-
-      // Backend expects employeeId: string | string[]
-      const payload: { employeeId: string | string[] } = {
-        employeeId: ids.length === 1 ? ids[0] : ids,
-      };
-
-      // Axios blob download
-      const blob = await postBlob("/kpi/exportCsv", payload, {
-        headers: { "Content-Type": "application/json" },
-        validateStatus: (s) => s >= 200 && s < 300,
-      });
-
-      // Trigger browser download
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      const dateStr = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-      a.download = `kpis-${exportScope}-${dateStr}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.URL.revokeObjectURL(url);
-
-      setExportOpen(false);
-      Swal.fire("Exported", "Your CSV download has started.", "success");
-    } catch (e: any) {
-      // Axios error → try to read server's blob/text message if present
-      let message = e?.message || "Failed to export CSV";
-      const maybeBlob = e?.response?.data;
-      if (maybeBlob instanceof Blob) {
-        try {
-          const text = await maybeBlob.text();
-          message = text || message;
-        } catch {
-          /* ignore */
-        }
-      }
-      console.error(e);
-      Swal.fire("Error", message, "error");
-    } finally {
-      setExporting(false);
+      ids = employees.map((e) => e.employeeId);
     }
-  }, [canManageKpi, exportScope, selectedEmployeeIds, employees]);
+
+    // Build payload with filters
+    const payload: any = {
+      employeeId: ids.length === 1 ? ids[0] : ids,
+      all: true, // export all rows (ignore pagination window)
+      search,
+      startDate: startDate || undefined,
+      endDate: endDate || undefined,
+      sortBy: (sortField === "startdate" || sortField === "deadline") ? sortField : "createdAt",
+      sortOrder: sortAsc ? "asc" : "desc",
+    };
+
+    // Call backend for CSV blob
+    const blob = await postBlob("/kpi/exportCsv", payload, {
+      headers: { "Content-Type": "application/json" },
+      validateStatus: (s) => s >= 200 && s < 300,
+    });
+
+    // Trigger browser download
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const dateStr = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+    a.download = `kpis-${exportScope}-${dateStr}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+
+    setExportOpen(false);
+    Swal.fire("Exported", "Your CSV download has started.", "success");
+  } catch (e: any) {
+    let message = e?.message || "Failed to export CSV";
+    const maybeBlob = e?.response?.data;
+    if (maybeBlob instanceof Blob) {
+      try {
+        const text = await maybeBlob.text();
+        message = text || message;
+      } catch {}
+    }
+    console.error(e);
+    Swal.fire("Error", message, "error");
+  } finally {
+    setExporting(false);
+  }
+}, [canManageKpi, exportScope, selectedEmployeeIds, employees, search, startDate, endDate, sortField, sortAsc]);
+
 
   const employeeOptions: MultiSelectOption[] = useMemo(
     () =>
