@@ -383,33 +383,57 @@ const KpisPage: FC = () => {
   const handleAdd = () => router.push("/kpi/addupdate");
   const handleEdit = (id: string) => router.push(`/kpi/addupdate?kpiId=${id}`);
 
-  const handlePunch = async (kpiId: string) => {
-    const { value: remark } = await Swal.fire({
-      title: "Punch In",
-      input: "textarea",
-      inputLabel: "Remark",
-      inputPlaceholder: "Enter your remark...",
-      showCancelButton: true,
-    });
-    if (!remark) return;
-    try {
-      setLoading(true);
-      const res = await post<{ success: boolean; data: any }>("/kpi/punch", {
-        kpiId,
-        remark,
+const handlePunch = async (kpiId: string) => {
+  const { isConfirmed } = await Swal.fire({
+    title: "Punch In",
+    input: "textarea",
+    inputLabel: "Remark (optional)",
+    inputPlaceholder: "You can leave this blank",
+    showCancelButton: true,
+  });
+
+  // Only stop if the user cancels the dialog
+  if (!isConfirmed) return;
+
+  try {
+    setLoading(true);
+
+    // Always send remark as empty string
+    const payload = { kpiId, remark: "" as const };
+
+    const res = await post<{ success: boolean; data?: any; message?: string }>(
+      "/kpi/punch",
+      payload
+    );
+
+    if (res?.success) {
+      const d = res.data || {};
+      await Swal.fire({
+        title: "Success",
+        html: `
+          <p>${res?.message || "Punch recorded successfully"}</p>
+          ${d.punchDate ? `<p><strong>Date:</strong> ${d.punchDate}</p>` : ""}
+          ${d.status ? `<p><strong>Status:</strong> ${d.status}</p>` : ""}
+          ${typeof d.pointChange === "number" ? <p><strong>Point Change:</strong> ${d.pointChange}</p> : ""}
+          ${typeof d.points === "number" ? <p><strong>Total Points:</strong> ${d.points}</p> : ""}
+        `,
+        icon: "success",
       });
-      if (res.success) {
-        Swal.fire("Success", "Punch recorded successfully", "success");
-        fetchData();
-      } else {
-        Swal.fire("Error", "Punch failed", "error");
-      }
-    } catch {
-      Swal.fire("Error", "Punch request failed", "error");
-    } finally {
-      setLoading(false);
+      fetchData();
+    } else {
+      await Swal.fire("Error", res?.message || "Punch failed", "error");
     }
-  };
+  } catch (e: any) {
+    let msg = e?.message || "Punch request failed";
+    const apiMsg =
+      e?.response?.data?.message ||
+      (typeof e?.response?.data === "string" ? e.response.data : "");
+    if (apiMsg) msg = apiMsg;
+    await Swal.fire("Error", msg, "error");
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleViewPunch = (date: string, remark: string, status: string | null) => {
     Swal.fire({
@@ -745,7 +769,7 @@ const handleExportCsv = useCallback(async () => {
                                 className="h-8 px-2 text-xs bg-gray-400 text-white rounded whitespace-nowrap"
                                 title="Already Punched"
                               >
-                                PunchIn
+                                Punched
                               </button>
                               <button
                                 onClick={() =>
