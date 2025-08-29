@@ -74,10 +74,11 @@ const groups: Group[] = [
   },
   {
     title: 'KPI',
-    permissionKeys: ['Manage KPI'],
+    permissionKeys: ['Manage KPI', 'KPI'],
     options: [
-      { title: 'Add KPI', route: '/kpi/addupdate', icon: '➕📈', permissionKey: 'Manage KPI' },
-      { title: 'View KPI', route: '/kpi', icon: '📈', permissionKey: 'Manage KPI' },
+      { title: 'Add KPI', route: '/kpi/addupdate', icon: '➕📈', permissionKey: 'KPI' },
+      { title: 'View KPI', route: '/kpi', icon: '📈', permissionKey: 'KPI' },
+      { title: 'Manage KPI', route: '/kpi', icon: '📈', permissionKey: 'Manage KPI' },
     ],
     color: 'amber',
   },
