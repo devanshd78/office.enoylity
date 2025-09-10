@@ -84,6 +84,55 @@ interface MultiSelectProps {
   buttonClassName?: string;
 }
 
+// === Date formatting helpers ===
+const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sept",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
+
+const formatShortDate = (value?: string | null): string => {
+  if (!value) return "";
+  // Try a few common formats safely
+  const tryParse = (s: string): Date | null => {
+    const dt1 = new Date(s);
+    if (!Number.isNaN(dt1.getTime())) return dt1;
+
+    // Fallbacks: normalize to YYYY-MM-DD where possible
+    const base = s.slice(0, 10).replace(/[./]/g, "-");
+    const parts = base.split("-");
+    if (parts.length === 3) {
+      let d: Date | null = null;
+      if (parts[0].length === 4) {
+        // YYYY-MM-DD
+        const [y, m, dd] = parts.map((p) => parseInt(p, 10));
+        d = new Date(y, (m || 1) - 1, dd || 1);
+      } else {
+        // DD-MM-YYYY (or similar)
+        const [dd, m, y] = parts.map((p) => parseInt(p, 10));
+        d = new Date(y || 0, (m || 1) - 1, dd || 1);
+      }
+      if (!Number.isNaN(d.getTime())) return d;
+    }
+    return null;
+  };
+
+  const dt = tryParse(value);
+  if (!dt) return value; // if unparsable, return original
+  const day = String(dt.getDate()).padStart(2, "0");
+  const mon = MONTHS[dt.getMonth()];
+  return `${day} ${mon}`; // e.g., 09 Sept
+};
+
 const MultiSelect: FC<MultiSelectProps> = ({
   options,
   values,
@@ -383,61 +432,61 @@ const KpisPage: FC = () => {
   const handleAdd = () => router.push("/kpi/addupdate");
   const handleEdit = (id: string) => router.push(`/kpi/addupdate?kpiId=${id}`);
 
-const handlePunch = async (kpiId: string) => {
-  const { isConfirmed } = await Swal.fire({
-    title: "Punch In",
-    input: "textarea",
-    inputLabel: "Remark (optional)",
-    inputPlaceholder: "You can leave this blank",
-    showCancelButton: true,
-  });
+  const handlePunch = async (kpiId: string) => {
+    const { isConfirmed } = await Swal.fire({
+      title: "Punch In",
+      input: "textarea",
+      inputLabel: "Remark (optional)",
+      inputPlaceholder: "You can leave this blank",
+      showCancelButton: true,
+    });
 
-  // Only stop if the user cancels the dialog
-  if (!isConfirmed) return;
+    // Only stop if the user cancels the dialog
+    if (!isConfirmed) return;
 
-  try {
-    setLoading(true);
+    try {
+      setLoading(true);
 
-    // Always send remark as empty string
-    const payload = { kpiId, remark: "" as const };
+      // Always send remark as empty string
+      const payload = { kpiId, remark: "" as const };
 
-    const res = await post<{ success: boolean; data?: any; message?: string }>(
-      "/kpi/punch",
-      payload
-    );
+      const res = await post<{ success: boolean; data?: any; message?: string }>(
+        "/kpi/punch",
+        payload
+      );
 
-    if (res?.success) {
-      const d = res.data || {};
-      await Swal.fire({
-        title: "Success",
-        html: `
+      if (res?.success) {
+        const d = res.data || {};
+        await Swal.fire({
+          title: "Success",
+          html: `
           <p>${res?.message || "Punch recorded successfully"}</p>
-          ${d.punchDate ? `<p><strong>Date:</strong> ${d.punchDate}</p>` : ""}
+          ${d.punchDate ? `<p><strong>Date:</strong> ${formatShortDate(d.punchDate)}</p>` : ""}
           ${d.status ? `<p><strong>Status:</strong> ${d.status}</p>` : ""}
         `,
-        icon: "success",
-      });
-      fetchData();
-    } else {
-      await Swal.fire("Error", res?.message || "Punch failed", "error");
+          icon: "success",
+        });
+        fetchData();
+      } else {
+        await Swal.fire("Error", res?.message || "Punch failed", "error");
+      }
+    } catch (e: any) {
+      let msg = e?.message || "Punch request failed";
+      const apiMsg =
+        e?.response?.data?.message ||
+        (typeof e?.response?.data === "string" ? e.response.data : "");
+      if (apiMsg) msg = apiMsg;
+      await Swal.fire("Error", msg, "error");
+    } finally {
+      setLoading(false);
     }
-  } catch (e: any) {
-    let msg = e?.message || "Punch request failed";
-    const apiMsg =
-      e?.response?.data?.message ||
-      (typeof e?.response?.data === "string" ? e.response.data : "");
-    if (apiMsg) msg = apiMsg;
-    await Swal.fire("Error", msg, "error");
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   const handleViewPunch = (date: string, remark: string, status: string | null) => {
     Swal.fire({
       title: "Last Punch Details",
       html: `
-        <p><strong>Date:</strong> ${date}</p>
+        <p><strong>Date:</strong> ${formatShortDate(date)}</p>
         <p><strong>Remark:</strong> ${remark}</p>
         <p><strong>Status:</strong> ${status}</p>
       `,
@@ -485,76 +534,76 @@ const handlePunch = async (kpiId: string) => {
   };
 
   // ===== Export CSV logic (manager-only, send only employeeId) =====
-const handleExportCsv = useCallback(async () => {
-  try {
-    setExporting(true);
+  const handleExportCsv = useCallback(async () => {
+    try {
+      setExporting(true);
 
-    if (!canManageKpi) {
-      Swal.fire("Permission denied", "Only managers can export CSV.", "error");
-      return;
-    }
-
-    // Resolve employeeIds
-    let ids: string[] = [];
-    if (exportScope === "selected") {
-      if (!selectedEmployeeIds.length) {
-        Swal.fire("Select employees", "Please choose at least one employee.", "info");
+      if (!canManageKpi) {
+        Swal.fire("Permission denied", "Only managers can export CSV.", "error");
         return;
       }
-      ids = selectedEmployeeIds;
-    } else {
-      if (!employees.length) {
-        Swal.fire("No employees", "Employees list is empty; cannot export.", "error");
-        return;
+
+      // Resolve employeeIds
+      let ids: string[] = [];
+      if (exportScope === "selected") {
+        if (!selectedEmployeeIds.length) {
+          Swal.fire("Select employees", "Please choose at least one employee.", "info");
+          return;
+        }
+        ids = selectedEmployeeIds;
+      } else {
+        if (!employees.length) {
+          Swal.fire("No employees", "Employees list is empty; cannot export.", "error");
+          return;
+        }
+        ids = employees.map((e) => e.employeeId);
       }
-      ids = employees.map((e) => e.employeeId);
+
+      // Build payload with filters
+      const payload: any = {
+        employeeId: ids.length === 1 ? ids[0] : ids,
+        all: true, // export all rows (ignore pagination window)
+        search,
+        startDate: startDate || undefined,
+        endDate: endDate || undefined,
+        sortBy: (sortField === "startdate" || sortField === "deadline") ? sortField : "createdAt",
+        sortOrder: sortAsc ? "asc" : "desc",
+      };
+
+      // Call backend for CSV blob
+      const blob = await postBlob("/kpi/exportCsv", payload, {
+        headers: { "Content-Type": "application/json" },
+        validateStatus: (s) => s >= 200 && s < 300,
+      });
+
+      // Trigger browser download
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const dateStr = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+      a.download = `kpis-${exportScope}-${dateStr}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+
+      setExportOpen(false);
+      Swal.fire("Exported", "Your CSV download has started.", "success");
+    } catch (e: any) {
+      let message = e?.message || "Failed to export CSV";
+      const maybeBlob = e?.response?.data;
+      if (maybeBlob instanceof Blob) {
+        try {
+          const text = await maybeBlob.text();
+          message = text || message;
+        } catch {}
+      }
+      console.error(e);
+      Swal.fire("Error", message, "error");
+    } finally {
+      setExporting(false);
     }
-
-    // Build payload with filters
-    const payload: any = {
-      employeeId: ids.length === 1 ? ids[0] : ids,
-      all: true, // export all rows (ignore pagination window)
-      search,
-      startDate: startDate || undefined,
-      endDate: endDate || undefined,
-      sortBy: (sortField === "startdate" || sortField === "deadline") ? sortField : "createdAt",
-      sortOrder: sortAsc ? "asc" : "desc",
-    };
-
-    // Call backend for CSV blob
-    const blob = await postBlob("/kpi/exportCsv", payload, {
-      headers: { "Content-Type": "application/json" },
-      validateStatus: (s) => s >= 200 && s < 300,
-    });
-
-    // Trigger browser download
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    const dateStr = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
-    a.download = `kpis-${exportScope}-${dateStr}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    window.URL.revokeObjectURL(url);
-
-    setExportOpen(false);
-    Swal.fire("Exported", "Your CSV download has started.", "success");
-  } catch (e: any) {
-    let message = e?.message || "Failed to export CSV";
-    const maybeBlob = e?.response?.data;
-    if (maybeBlob instanceof Blob) {
-      try {
-        const text = await maybeBlob.text();
-        message = text || message;
-      } catch {}
-    }
-    console.error(e);
-    Swal.fire("Error", message, "error");
-  } finally {
-    setExporting(false);
-  }
-}, [canManageKpi, exportScope, selectedEmployeeIds, employees, search, startDate, endDate, sortField, sortAsc]);
+  }, [canManageKpi, exportScope, selectedEmployeeIds, employees, search, startDate, endDate, sortField, sortAsc]);
 
 
   const employeeOptions: MultiSelectOption[] = useMemo(
@@ -723,7 +772,9 @@ const handleExportCsv = useCallback(async () => {
 
                       {COLUMNS.map((col) => (
                         <td key={col} className="px-3 py-2 whitespace-nowrap text-sm">
-                          {k[col] as any}
+                          {col === "startdate" || col === "deadline"
+                            ? formatShortDate(k[col] as string | null)
+                            : ((k as any)[col] as any)}
                         </td>
                       ))}
 
@@ -843,10 +894,10 @@ const handleExportCsv = useCallback(async () => {
                   {expanded[k.kpiId] && (
                     <div className="p-4 space-y-2 text-sm">
                       <div>
-                        <strong>Start:</strong> {k.startdate}
+                        <strong>Start:</strong> {formatShortDate(k.startdate)}
                       </div>
                       <div>
-                        <strong>Deadline:</strong> {k.deadline}
+                        <strong>Deadline:</strong> {formatShortDate(k.deadline)}
                       </div>
                       <div>
                         <strong>Remark:</strong> {k.remark}
