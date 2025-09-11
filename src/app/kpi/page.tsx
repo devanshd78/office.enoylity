@@ -31,16 +31,6 @@ import {
 } from "@/components/ui/command";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 export interface KpiItem {
   kpiId: string;
@@ -177,44 +167,46 @@ const MultiSelect: FC<MultiSelectProps> = ({
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[320px] p-0" align="start">
-          <Command>
+          <Command className="max-h-72">
             <CommandInput placeholder="Search employees..." />
             <CommandEmpty>No results found.</CommandEmpty>
-            <CommandList>
+
+            {/* Make the LIST scroll, not a nested ScrollArea */}
+            <CommandList className="max-h-72 overflow-y-auto">
               <CommandGroup heading="Bulk">
                 <CommandItem
-                  value={allSelected ? "deselect-all" : "select-all"}
+                  value={selected.length === options.length && options.length > 0 ? "deselect-all" : "select-all"}
                   onSelect={() =>
-                    onChange(allSelected ? [] : options.map((o) => o.value))
+                    onChange(selected.length === options.length && options.length > 0 ? [] : options.map((o) => o.value))
                   }
                   className="cursor-pointer"
                 >
-                  <Checkbox className="mr-2" checked={allSelected} />
-                  {allSelected ? "Deselect all" : "Select all"}
+                  <Checkbox className="mr-2" checked={selected.length === options.length && options.length > 0} />
+                  {selected.length === options.length && options.length > 0 ? "Deselect all" : "Select all"}
                 </CommandItem>
               </CommandGroup>
+
               <CommandGroup heading="Employees">
-                <ScrollArea className="max-h-64">
-                  {options.map((opt) => {
-                    const checked = values.includes(opt.value);
-                    return (
-                      <CommandItem
-                        key={opt.value}
-                        value={opt.label}
-                        onSelect={() => toggleValue(opt.value)}
-                        className="cursor-pointer"
-                      >
-                        <Checkbox checked={checked} className="mr-2" />
-                        <span className="flex-1 truncate">{opt.label}</span>
-                        {checked ? <Check className="h-4 w-4" /> : null}
-                      </CommandItem>
-                    );
-                  })}
-                </ScrollArea>
+                {options.map((opt) => {
+                  const checked = values.includes(opt.value);
+                  return (
+                    <CommandItem
+                      key={opt.value}
+                      value={opt.label}
+                      onSelect={() => toggleValue(opt.value)}
+                      className="cursor-pointer"
+                    >
+                      <Checkbox checked={checked} className="mr-2" />
+                      <span className="flex-1 truncate">{opt.label}</span>
+                      {checked ? <Check className="h-4 w-4" /> : null}
+                    </CommandItem>
+                  );
+                })}
               </CommandGroup>
             </CommandList>
           </Command>
         </PopoverContent>
+
       </Popover>
     </div>
   );
@@ -289,22 +281,50 @@ const KpisPage: FC = () => {
     try {
       const res = await post<{
         success: boolean;
-        data: { employees: Array<{ employeeId: string; name: string }> };
+        data: { employees: any[] };
       }>("/employee/getlist", { page: 1, pageSize: 1000 });
 
       if (res?.success && Array.isArray(res.data?.employees)) {
-        const dedup = new Map<string, Employee>();
-        res.data.employees.forEach((e) => {
-          dedup.set(e.employeeId, {
-            employeeId: e.employeeId,
-            employeeName: e.name,
-          });
-        });
-        setEmployees(
-          Array.from(dedup.values()).sort((a, b) =>
-            a.employeeName.localeCompare(b.employeeName)
-          )
-        );
+        // 1) Normalize shape + choose a stable id
+        const normalized: Employee[] = res.data.employees
+          .map((raw, idx): Employee | null => {
+            const id =
+              raw.employeeId ??
+              raw.employee_id ??
+              raw.id ??
+              raw._id ??
+              raw.employeeCode ??
+              raw.code ??
+              raw.email ?? // last-resort fallback
+              null;
+
+            if (!id) return null; // can't use this row without an id
+
+            const name =
+              raw.name ||
+              String(id);
+
+            return {
+              employeeId: String(id),
+              employeeName: String(name),
+            };
+          })
+          .filter((e): e is Employee => !!e);
+
+        // 2) Dedupe by the resolved id (not by possibly-undefined employeeId)
+        const seen = new Set<string>();
+        const unique: Employee[] = [];
+        for (const e of normalized) {
+          const key = e.employeeId.trim();
+          if (seen.has(key)) continue;
+          seen.add(key);
+          unique.push(e);
+        }
+
+        // 3) Sort for display
+        unique.sort((a, b) => a.employeeName.localeCompare(b.employeeName));
+
+        setEmployees(unique);
       }
     } catch (e) {
       console.warn("Failed to fetch employees list", e);
@@ -596,7 +616,7 @@ const KpisPage: FC = () => {
         try {
           const text = await maybeBlob.text();
           message = text || message;
-        } catch {}
+        } catch { }
       }
       console.error(e);
       Swal.fire("Error", message, "error");

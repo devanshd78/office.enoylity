@@ -1,7 +1,7 @@
 "use client";
 
-import React, { FC, useState, useEffect, useMemo, useCallback } from 'react';
-import Link from 'next/link';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   FaSort,
   FaSortUp,
@@ -12,7 +12,6 @@ import {
   FaEdit,
   FaTrash
 } from 'react-icons/fa';
-import { useRouter } from 'next/navigation';
 import Swal from 'sweetalert2';
 import { post } from '../utils/apiClient';
 
@@ -45,11 +44,15 @@ const COLUMNS: Array<keyof Employee> = [
 
 export default function EmployeesPage() {
   const router = useRouter();
+
   const [search, setSearch] = useState('');
   const [sortField, setSortField] = useState<keyof Employee>('name');
   const [sortAsc, setSortAsc] = useState(true);
+
+  // backend-driven pagination state
   const [page, setPage] = useState(1);
-  const perPage = 10;
+  const perPage = 10; // only sent to backend; not used for any client slicing
+
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [role, setRole] = useState<string | null>(null);
@@ -72,7 +75,7 @@ export default function EmployeesPage() {
     [role, permissions]
   );
 
-  // Fetch employees
+  // Data from backend (already paginated)
   const [data, setData] = useState<Employee[]>([]);
   const [totalPages, setTotalPages] = useState(1);
 
@@ -81,12 +84,28 @@ export default function EmployeesPage() {
     try {
       const result = await post<
         { success: boolean; data: { employees: Employee[]; totalPages: number } }
-      >('/employee/getlist', { search, page, pageSize: perPage });
+      >('/employee/getlist', {
+        search,
+        page,
+        pageSize: perPage,
+        // push sorting to backend so pagination is consistent with sort
+        sortField,
+        sortOrder: sortAsc ? 'asc' : 'desc',
+      });
 
       if (result.success) {
-        setData(result.data.employees);
-        setTotalPages(result.data.totalPages);
-        if (result.data.employees.length === 0) {
+        const employees = result.data.employees || [];
+        setTotalPages(result.data.totalPages || 1);
+
+        // if the current page is empty but there are earlier pages, step back
+        if (employees.length === 0 && page > 1) {
+          setPage(p => Math.max(p - 1, 1));
+          return; // will refetch due to dependency
+        }
+
+        setData(employees);
+
+        if (employees.length === 0) {
           Swal.fire({
             toast: true,
             position: 'top-end',
@@ -103,30 +122,15 @@ export default function EmployeesPage() {
     } finally {
       setLoading(false);
     }
-  }, [search, page]);
+  }, [search, page, perPage, sortField, sortAsc]);
 
   useEffect(() => {
     if (canView) fetchData();
   }, [fetchData, canView]);
 
-  // Sorting
-  const sorted = useMemo(() => {
-    return [...data].sort((a, b) => {
-      const aVal = a[sortField] ?? '';
-      const bVal = b[sortField] ?? '';
-      if (aVal < bVal) return sortAsc ? -1 : 1;
-      if (aVal > bVal) return sortAsc ? 1 : -1;
-      return 0;
-    });
-  }, [data, sortField, sortAsc]);
-
-  const pageData = useMemo(() => {
-    return sorted.slice((page - 1) * perPage, page * perPage);
-  }, [sorted, page]);
-
-  // Handlers
+  // Sorting (triggers backend refetch; no client-side sorting/slicing)
   const onSort = (field: keyof Employee) => {
-    if (field === sortField) setSortAsc((p) => !p);
+    if (field === sortField) setSortAsc(p => !p);
     else {
       setSortField(field);
       setSortAsc(true);
@@ -135,7 +139,7 @@ export default function EmployeesPage() {
   };
 
   const toggleExpand = (id: string) => {
-    setExpanded((p) => ({ ...p, [id]: !p[id] }));
+    setExpanded(p => ({ ...p, [id]: !p[id] }));
   };
 
   const handleEdit = (id: string) => {
@@ -219,11 +223,7 @@ export default function EmployeesPage() {
                         <div className="flex items-center">
                           {col.charAt(0).toUpperCase() + col.slice(1)}
                           {sortField === col ? (
-                            sortAsc ? (
-                              <FaSortUp className="ml-1" />
-                            ) : (
-                              <FaSortDown className="ml-1" />
-                            )
+                            sortAsc ? <FaSortUp className="ml-1" /> : <FaSortDown className="ml-1" />
                           ) : (
                             <FaSort className="ml-1 text-gray-400" />
                           )}
@@ -234,11 +234,11 @@ export default function EmployeesPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {pageData.map((emp) => (
+                  {data.map((emp) => (
                     <tr key={emp.employeeId} className="border-t hover:bg-gray-50">
                       {COLUMNS.map((col) => (
                         <td key={col} className="px-3 py-2 whitespace-nowrap text-sm">
-                          {typeof emp[col] === 'object' ? JSON.stringify(emp[col]) : emp[col] ?? ''}
+                          {typeof emp[col] === 'object' ? JSON.stringify(emp[col]) : (emp[col] ?? '')}
                         </td>
                       ))}
                       <td className="px-3 py-2 whitespace-nowrap text-sm flex space-x-2">
@@ -265,7 +265,7 @@ export default function EmployeesPage() {
 
             {/* Mobile List */}
             <div className="sm:hidden">
-              {pageData.map((emp) => (
+              {data.map((emp) => (
                 <div key={emp.employeeId} className="bg-white mb-4 rounded-lg shadow">
                   <div className="flex justify-between items-center p-4">
                     <div>
@@ -300,27 +300,22 @@ export default function EmployeesPage() {
               ))}
             </div>
 
-            {/* Pagination */}
-            <div className="flex justify-center mt-4 space-x-2">
+            {/* Backend-only Pagination Controls */}
+            <div className="flex items-center justify-center mt-4 space-x-3">
               <button
-                onClick={() => setPage((p) => Math.max(p - 1, 1))}
+                onClick={() => setPage(p => Math.max(p - 1, 1))}
                 disabled={page === 1}
                 className="px-3 py-1 border rounded disabled:opacity-50"
               >
                 Prev
               </button>
-              {Array.from({ length: totalPages }, (_, i) => (
-                <button
-                  key={i}
-                  onClick={() => setPage(i + 1)}
-                  className={`px-3 py-1 border rounded ${page === i + 1 ? 'bg-indigo-200' : ''}`}
-                >
-                  {i + 1}
-                </button>
-              ))}
+              {/* simple page indicator (no client-side page list) */}
+              <span className="text-sm text-gray-700">
+                Page {page} of {totalPages}
+              </span>
               <button
-                onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
-                disabled={page === totalPages}
+                onClick={() => setPage(p => Math.min(p + 1, totalPages))}
+                disabled={page >= totalPages}
                 className="px-3 py-1 border rounded disabled:opacity-50"
               >
                 Next
