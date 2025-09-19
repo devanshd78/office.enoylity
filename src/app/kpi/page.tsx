@@ -232,6 +232,7 @@ const KpisPage: FC = () => {
 
   const [role, setRole] = useState<string | null>(null);
   const [permissions, setPermissions] = useState<Record<string, number>>({});
+
   useEffect(() => {
     setRole(localStorage.getItem("role"));
     try {
