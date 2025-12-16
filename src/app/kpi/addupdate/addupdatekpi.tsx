@@ -1,6 +1,6 @@
 "use client";
 
-import React, { FC, useState, useEffect, FormEvent } from "react";
+import React, { FC, useEffect, useMemo, useState, FormEvent } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import Swal from "sweetalert2";
@@ -32,19 +32,20 @@ const safeParseJson = <T,>(raw: string | null, fallback: T): T => {
 const AddUpdateKpiPage: FC = () => {
   const router = useRouter();
   const params = useSearchParams();
-  const kpiId = params.get("kpiId") ?? ""; // avoid non-null assertion
+
+  const kpiId = params.get("kpiId") ?? "";
   const isEdit = Boolean(kpiId);
 
-  // Role/permission state
-  const [userRole, setUserRole] = useState<string>("");
-  const [canManageKpi, setCanManageKpi] = useState<boolean>(false);
+  // Permissions / user
+  const [userRole, setUserRole] = useState("");
+  const [canManageKpi, setCanManageKpi] = useState(false);
   const [currentUser, setCurrentUser] = useState<Employee | null>(null);
 
-  // Employee list/loading
+  // Employees
   const [employees, setEmployees] = useState<Employee[]>([]);
-  const [empLoading, setEmpLoading] = useState<boolean>(true);
+  const [empLoading, setEmpLoading] = useState(true);
 
-  // KPI input/loading
+  // KPI form
   const [input, setInput] = useState<KpiInput>({
     employeeId: "",
     projectName: "",
@@ -52,91 +53,128 @@ const AddUpdateKpiPage: FC = () => {
     deadline: "",
     remark: "",
   });
-  const [loading, setLoading] = useState<boolean>(isEdit);
 
-  /**
-   * On mount: determine role + granular permissions and load employees accordingly.
-   * Anyone with manage-KPI permission (admin or explicit permission) can add KPI for ANY employee.
-   */
+  // Loading + submission lock (prevents 2-3-4-5 clicks + multiple API calls)
+  const [loading, setLoading] = useState<boolean>(isEdit);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+
+  // Determine permission and load employees/user on mount
   useEffect(() => {
+    let alive = true;
+
     const role = localStorage.getItem("role") || "";
     const empIdLS = localStorage.getItem("employeeId") || "";
-    // Align with KPI list page logic: admin OR (subadmin AND "Manage KPI" permission)
-    let permsObj: Record<string, any> = {};
-    try {
-      permsObj = JSON.parse(localStorage.getItem("permissions") || "{}");
-    } catch {}
-    const canManageFlag =
-      role === "admin" ||
-      (role === "subadmin" && permsObj["Manage KPI"] === 1);
+    const permsObj = safeParseJson<Record<string, any>>(
+      localStorage.getItem("permissions"),
+      {}
+    );
+
+    const canManageFlag = role === "admin" || (role === "subadmin" && permsObj["Manage KPI"] === 1);
 
     setUserRole(role);
     setCanManageKpi(canManageFlag);
 
-    // If user can manage KPIs, show the employee selector (we need the list)
-    // Otherwise, lock to self by fetching their record
     const load = async () => {
       try {
         if (canManageFlag) {
-          const res = await post<{ success: boolean; data: { employees: Employee[] } }>(
-            "/employee/getlist",
-            { page: 1, pageSize: 1000 }
-          );
+          const res = await post<{
+            success: boolean;
+            data: { employees: Employee[] };
+            message?: string;
+          }>("/employee/getlist", { page: 1, pageSize: 1000 });
+
+          if (!alive) return;
+
           if (res.success) {
-            setEmployees(res.data.employees || []);
+            setEmployees(res.data?.employees || []);
           } else {
-            throw new Error("Failed to load employees");
+            throw new Error(res.message || "Failed to load employees");
           }
         } else {
           const res = await get<{
             success: boolean;
             data: { employee: Employee };
-          }>(`/employee/getrecord?employeeId=${empIdLS}`);
+            message?: string;
+          }>(`/employee/getrecord?employeeId=${encodeURIComponent(empIdLS)}`);
+
+          if (!alive) return;
+
           if (res.success) {
             const emp = res.data.employee;
             setCurrentUser(emp);
             setInput((prev) => ({ ...prev, employeeId: emp.employeeId }));
           } else {
-            throw new Error("Failed to load user record");
+            throw new Error(res.message || "Failed to load user record");
           }
         }
       } catch (err: any) {
+        if (!alive) return;
         console.error(err);
-        Swal.fire("Error", err.message || "Something went wrong", "error");
+        Swal.fire("Error", err?.message || "Something went wrong", "error");
       } finally {
+        if (!alive) return;
         setEmpLoading(false);
       }
     };
 
     load();
+
+    return () => {
+      alive = false;
+    };
   }, []);
 
-  // Edit mode: load KPI data
+  // Edit mode: load KPI record
   useEffect(() => {
-    if (!isEdit) {
-      setLoading(false);
-      return;
-    }
-    get<{ success: boolean; data?: any; message?: string }>(`/kpi/getByKpiId/${kpiId}`)
-      .then((res) => {
+    let alive = true;
+
+    const loadKpi = async () => {
+      if (!isEdit) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const res = await get<{ success: boolean; data?: any; message?: string }>(
+          `/kpi/getByKpiId/${encodeURIComponent(kpiId)}`
+        );
+
+        if (!alive) return;
+
         if (res.success && res.data) {
           const d = res.data;
           setInput({
-            employeeId: d.employeeId,
-            projectName: d.projectName,
-            startdate: d.startdate,
-            deadline: d.deadline,
-            remark: d.remark || d.Remark || "",
+            employeeId: d.employeeId ?? "",
+            projectName: d.projectName ?? "",
+            startdate: d.startdate ?? "",
+            deadline: d.deadline ?? "",
+            remark: d.remark ?? d.Remark ?? "",
           });
         } else {
-          Swal.fire("Error", res.message || "Could not load KPI", "error").then(() =>
-            router.back()
-          );
+          await Swal.fire("Error", res.message || "Could not load KPI", "error");
+          router.back();
         }
-      })
-      .catch(() => router.back())
-      .finally(() => setLoading(false));
+      } catch (e) {
+        if (!alive) return;
+        router.back();
+      } finally {
+        if (!alive) return;
+        setLoading(false);
+      }
+    };
+
+    loadKpi();
+
+    return () => {
+      alive = false;
+    };
   }, [isEdit, kpiId, router]);
+
+  const showEmployeeSelector = useMemo(() => !isEdit && canManageKpi, [isEdit, canManageKpi]);
+
+  const currentEmp = useMemo(() => {
+    return employees.find((e) => e.employeeId === input.employeeId) || currentUser;
+  }, [employees, input.employeeId, currentUser]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -148,15 +186,24 @@ const AddUpdateKpiPage: FC = () => {
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
 
-    // Basic guard when adding: ensure an employee is selected if user can manage
+    // HARD GUARD: prevent multiple rapid submits (double click / spam click)
+    if (isSubmitting) return;
+
+    // Basic guard when adding
     if (!isEdit && !input.employeeId) {
       Swal.fire("Missing employee", "Please select an employee.", "warning");
       return;
     }
 
+    setIsSubmitting(true);
+
     const endpoint = isEdit ? "/kpi/updateKPi" : "/kpi/addkpi";
-    const payload: any = isEdit
-      ? { kpiId, projectName: input.projectName, Remark: input.remark }
+    const payload = isEdit
+      ? {
+          kpiId,
+          projectName: input.projectName,
+          Remark: input.remark,
+        }
       : {
           employeeId: input.employeeId,
           projectName: input.projectName,
@@ -167,11 +214,12 @@ const AddUpdateKpiPage: FC = () => {
 
     try {
       const res = await post<{ success: boolean; message?: string }>(endpoint, payload);
+
       if (res.success) {
         await Swal.fire({
           icon: "success",
           title: isEdit ? "KPI Updated" : "KPI Added",
-          timer: 1500,
+          timer: 1200,
           showConfirmButton: false,
         });
         router.push("/kpi");
@@ -180,6 +228,8 @@ const AddUpdateKpiPage: FC = () => {
       }
     } catch (err: any) {
       Swal.fire("Error", err?.message || "Please try again later", "error");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -187,28 +237,24 @@ const AddUpdateKpiPage: FC = () => {
     return <div className="p-8 text-center">Loading...</div>;
   }
 
-  // Display employee name for locked view
-  const currentEmp =
-    employees.find((e) => e.employeeId === input.employeeId) || currentUser;
-
-  const showEmployeeSelector = !isEdit && canManageKpi; // key change: managers can assign KPIs to others when adding
-
   return (
     <div className="min-h-screen bg-indigo-100 p-6">
       <div className="max-w-3xl mx-auto bg-white rounded-lg shadow-lg p-8">
         <h1 className="text-3xl font-semibold mb-6">{isEdit ? "Edit" : "Add"} KPI</h1>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Employee Selector */}
+          {/* Employee */}
           <div>
             <label className="block text-sm font-medium mb-1">Employee</label>
+
             {showEmployeeSelector ? (
               <select
                 name="employeeId"
                 required
                 value={input.employeeId}
                 onChange={handleChange}
-                className="w-full px-4 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500"
+                disabled={isSubmitting}
+                className="w-full px-4 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 disabled:opacity-60"
               >
                 <option value="">-- Select an employee --</option>
                 {employees.map((emp) => (
@@ -233,7 +279,8 @@ const AddUpdateKpiPage: FC = () => {
               required
               value={input.projectName}
               onChange={handleChange}
-              className="w-full px-4 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500"
+              disabled={isSubmitting}
+              className="w-full px-4 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 disabled:opacity-60"
             />
           </div>
 
@@ -250,10 +297,12 @@ const AddUpdateKpiPage: FC = () => {
                   required
                   value={input.startdate}
                   onChange={handleChange}
-                  className="w-full px-4 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500"
+                  disabled={isSubmitting}
+                  className="w-full px-4 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 disabled:opacity-60"
                 />
               )}
             </div>
+
             <div>
               <label className="block text-sm font-medium mb-1">Deadline</label>
               {isEdit ? (
@@ -265,7 +314,8 @@ const AddUpdateKpiPage: FC = () => {
                   required
                   value={input.deadline}
                   onChange={handleChange}
-                  className="w-full px-4 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500"
+                  disabled={isSubmitting}
+                  className="w-full px-4 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 disabled:opacity-60"
                 />
               )}
             </div>
@@ -279,23 +329,35 @@ const AddUpdateKpiPage: FC = () => {
               value={input.remark}
               onChange={handleChange}
               rows={3}
-              className="w-full px-4 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500"
+              disabled={isSubmitting}
+              className="w-full px-4 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 disabled:opacity-60"
             />
           </div>
 
           {/* Actions */}
           <div className="flex justify-end space-x-4 pt-6">
-            <Link href="/kpi" className="px-6 py-2 border rounded-md hover:bg-gray-100 text-sm">
+            <Link
+              href="/kpi"
+              className={`px-6 py-2 border rounded-md hover:bg-gray-100 text-sm ${
+                isSubmitting ? "pointer-events-none opacity-60" : ""
+              }`}
+            >
               Cancel
             </Link>
+
             <button
               type="submit"
-              className="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm"
+              disabled={isSubmitting}
+              aria-busy={isSubmitting}
+              className="px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 text-sm disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              Save
+              {isSubmitting ? "Saving..." : "Save"}
             </button>
           </div>
         </form>
+
+        {/* (optional) debug */}
+        {/* <pre className="mt-4 text-xs text-gray-400">{JSON.stringify({ userRole, canManageKpi }, null, 2)}</pre> */}
       </div>
     </div>
   );
