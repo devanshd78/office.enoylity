@@ -16,6 +16,7 @@ type EmployeeInput = {
   designation: string;
   baseSalary: number;
   annualCtc: number;
+  timezone: "Asia/Kolkata" | "America/Los_Angeles";
   bankDetails: {
     bank_name: string;
     ifsc: string;
@@ -34,6 +35,11 @@ type EmployeeInput = {
   adharnumber: string;
 };
 
+const TZ_OPTIONS = [
+  { value: "Asia/Kolkata", label: "India (Asia/Kolkata)" },
+  { value: "America/Los_Angeles", label: "Las Vegas (America/Los_Angeles)" },
+] as const;
+
 export default function AddEditEmployeePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -49,6 +55,7 @@ export default function AddEditEmployeePage() {
     designation: "",
     baseSalary: 0,
     annualCtc: 0,
+    timezone: "Asia/Kolkata",
     bankDetails: {
       bank_name: "",
       ifsc: "",
@@ -68,7 +75,7 @@ export default function AddEditEmployeePage() {
   });
 
   // Fetch existing employee if editing
-useEffect(() => {
+  useEffect(() => {
     if (!isEdit) return;
 
     (async () => {
@@ -90,6 +97,10 @@ useEffect(() => {
             designation: e.designation || "",
             baseSalary: e.base_salary || 0,
             annualCtc: e.annual_salary || 0,
+            timezone:
+              e.timezone === "America/Los_Angeles"
+                ? "America/Los_Angeles"
+                : "Asia/Kolkata",
             bankDetails: {
               bank_name: e.bank_details.bank_name || "",
               ifsc: e.bank_details.ifsc || "",
@@ -135,6 +146,7 @@ useEffect(() => {
       base_salary: emp.baseSalary,
       department: emp.department,
       designation: emp.designation,
+      timezone: emp.timezone,
       bank_details: {
         account_number: emp.bankDetails.account_number,
         ifsc: emp.bankDetails.ifsc,
@@ -198,6 +210,23 @@ useEffect(() => {
                 className={`w-full px-4 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 ${isEdit
                   ? 'bg-gray-100 opacity-50 pointer-events-none cursor-not-allowed' : ''}`}
               />
+            </div>
+
+            <div className="w-full md:w-1/2">
+              <label className="block text-sm font-medium mb-1">Timezone</label>
+              <select
+                value={emp.timezone}
+                onChange={(e) =>
+                  setEmp({ ...emp, timezone: e.target.value as EmployeeInput["timezone"] })
+                }
+                className="w-full px-4 py-2 border rounded-md focus:ring-2 focus:ring-indigo-500 bg-white"
+              >
+                {TZ_OPTIONS.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
